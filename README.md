@@ -23,7 +23,7 @@ Module Descriptions
 
 We provide the preprocessing code used to correct IMC signal detection errors, nuclear detection errors, and field-of-view (FOV) boundaries. After applying these preprocessing steps, a flag called Sel01 is added to each cell. Cells marked with Sel01 = 1 indicate cells retained for downstream analyses.
 
-The IMC proteomics data have been deposited in Zenodo (an open-access repository developed under the European OpenAIRE program and operated by CERN) under the accession number DOI: 10.5281/zenodo.18823151. Please locate the folder “IMC_preprocessing_raw_csv” and use the data contained within.
+The IMC proteomics data have been deposited in Zenodo (an open-access repository developed under the European OpenAIRE program and operated by CERN) under the accession number DOI: 10.5281/zenodo.18823151 (https://zenodo.org/records/18823151). Please locate the folder “IMC_preprocessing_raw_csv” and use the data contained within.
 
 o	IMC signal filtering
 
@@ -42,7 +42,7 @@ ________________________________________
 
 We provide the code used for proteomics clustering IMC-derived single-cell proteomic data, "preprocessed_csv” files in the associated folder.
 
-The IMC proteomics data have been deposited in Zenodo (an open-access repository developed under the European OpenAIRE program and operated by CERN) under the accession number DOI: 10.5281/zenodo.18823151. Please locate the folder “IMC_clustering_rds” and use the data contained within.
+The IMC proteomics data have been deposited in Zenodo (an open-access repository developed under the European OpenAIRE program and operated by CERN) under the accession number DOI: 10.5281/zenodo.18823151 (https://zenodo.org/records/18823151). Please locate the folder “IMC_clustering_rds” and use the data contained within.
 
 IMC_Seurat_clustering.rmd
 
