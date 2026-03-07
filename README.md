@@ -23,12 +23,15 @@ Module Descriptions
 We provide the preprocessing code used to correct IMC signal detection errors, nuclear detection errors, and field-of-view (FOV) boundaries. After applying these preprocessing steps, a flag called Sel01 is added to each cell. Cells marked with Sel01 = 1 indicate cells retained for downstream analyses.
 
 o	IMC signal filtering
+
 To remove putative signal detection errors, manual upper-threshold filtering is applied. Cells with expression values above a manually selected threshold are replaced with NaN in the output table.
 
 o	Nuclear detection correction (Matlab)
+
 For refinement of single-cell identification with Cell Profiler v4.2.1 and histoCAT, we developed a custom MATLAB-based computational algorithm to identify multiple detections originating from the same cell, thereby maximizing the accuracy of cell-identification.
 
 o	Field-of-view (FOV) correction (Matlab)
+
 We also implemented a field-of-view (FOV) correction code that refines the region used for analysis in IMC spatial data, particularly for spinal cord tissue.
 
 ________________________________________
@@ -36,19 +39,24 @@ ________________________________________
 We provide the code used for clustering IMC-derived single-cell proteomic data.
 
 IMC_Seurat_clustering.rmd
+
 This script performs single-cell protein clustering of Imaging Mass Cytometry (IMC) data using the Seurat framework.
 The workflow includes data loading, preprocessing, integration, dimensionality reduction, clustering, and visualization of cell populations.
 
 IMC_subclustering.rmd
+
 This script performs subclustering analysis of major cell populations identified from Imaging Mass Cytometry (IMC) single-cell protein data.
 
 IMC_DEPs_heatmap.rmd
+
 This script computes differential marker expression between ALS and control groups within each major cell type from the integrated IMC Seurat object and visualizes the results as a heatmap.
 
 IMC_marker_expression_profiles.rmd
+
 This script generates dot plots showing marker expression across subcelltypes for selected major cell classes from the integrated IMC Seurat object.
 
 IMC_cell_transition.rmd
+
 This script performs cell-state transition analysis of astrocyte subcelltypes identified from integrated IMC single-cell protein data, using Monocle 3 (https://cole-trapnell-lab.github.io/monocle3/).
 
  
@@ -58,19 +66,32 @@ For parameter settings used for other brain regions, please refer to IMC_analysi
 ________________________________________
 3. ALS Distance Analysis (MATLAB)
 This module contains MATLAB scripts used to analyze spatial relationships among distinct cell clusters.
+
 The algorithm:
+
 •	Calculates pairwise distances between cells within defined clusters
+
 •	Evaluates whether spatial differences between clusters are statistically significant
+
 •	Summarizes the results to determine whether significant spatial correlations are present
+
 Running the Distance Analysis
+
 Download all files and place them in a single directory.
+
 Run the scripts in the following order:
+
 ALS_Distance_Analysis_1_ALS_F_FrontalCrtx_240511_2_260306_hikosaka.m
+
 ...
+
 ALS_Distance_Analysis_6_ALS_M_SpinalCord_240424_1_260306_hikosaka.m
 
+
 After completing the above scripts, run the final script:
+
 ALS_Distance_Analysis_Total_analysis_260306_hikosaka.m
+
 ________________________________________
 4. Public Data Analysis (R)
 We provide R scripts used to analyze publicly available single-cell RNA-seq
