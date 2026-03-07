@@ -1,0 +1,921 @@
+# =============================================================================
+# IMC_marker_expression_profiles.R
+#
+# Description:
+# This script generates dot plots showing marker expression across
+# subcelltypes for selected major cell classes.
+#
+# Author:
+# Momoka Hikosaka
+# Kyoto University
+#
+# Associated publication:
+# Hikosaka et al. in review
+# "Glial metabolic states in human sporadic amyotrophic lateral sclerosis
+# uncovered by spatial single-cell proteomics."
+#
+# Input:
+# - Integrated Seurat object
+#
+# Output:
+# - Dot plots summarizing marker expression (pTDP43, UBQLN2, GLS, TREM2)
+#   across subcelltypes
+# - Heatmap visualization of marker expression patterns
+#
+# Notes:
+# Analysis parameters are currently configured for the Precentral gyrus dataset.
+# For analyses of other brain regions, please refer to "IMC_analysis_paramaters.txt"
+#
+# License:
+# Copyright (c) 2025 Momoka Hikosaka
+# This code is provided for academic research purposes.
+# =============================================================================
+
+
+## Environment cleanup
+```{r}
+rm(list = ls())  
+```
+
+## Load required packages
+```{r}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(dplyr)
+  library(harmony)
+  library(tidyverse)
+  library(ggplot2)
+  library(viridis)
+  library(patchwork)
+  library(harmony)
+  library(cowplot)
+  library(tools)
+  library(forcats) 
+  library(tidyr)
+  library(scales)
+})
+```
+
+## Output directory
+```{r}
+output_folder <- "output"
+if (!dir.exists(output_folder)) {
+  dir.create(output_folder)
+}
+```
+
+## Load previously saved object
+```{r}
+combined_seurat <- readRDS(
+   file = file.path("rds/combined_seurat_PrecentralGyrus.rds")
+)
+```
+
+## Markers info
+```{r}
+Markers_astro <- c("Cell-141Pr-AQP4", "Cell-158Gd-GFAP")
+Markers_immune <- c("Cell-161Dy-CX3CR1", "Cell-164Dy-TMEM119","Cell-160Gd-IBA1","Cell-163Dy-CD4", "Cell-155Gd-FoxP3", "Cell-167Er-CD8")
+Markers_neuron <- c("Cell-151Eu-MAP2","Cell-149Sm-C9orf72", "Cell-169Tm-ChAT","Cell-166Er-GAD67")
+Markers_others <- c("Cell-175Lu-TDP43",
+"Cell-154Sm-pTDP43",
+"Cell-168Er-FUS",
+"Cell-152Sm-ATXN2",
+"Cell-145Nd-UBQLN2",
+"Cell-170Er-APOE",
+"Cell-176Yb-TBK1",
+"Cell-162Dy-pTBK1",
+"Cell-147Sm-Glutaminase",
+"Cell-143Nd-SQSTM1",
+"Cell-156Gd-CH24H",
+"Cell-153Eu-ORF1",
+"Cell-159Tb-IL6ST",
+"Cell-165Ho-PD1",
+"Cell-150Nd-PDL1",
+"Cell-172Yb-PDL2",
+"Cell-171Yb-TREM2",
+"Cell-174Yb-MHCclassII"
+)
+
+Markers <- c(Markers_astro, Markers_immune, Markers_neuron, Markers_others)
+
+Marker_label <- c(
+  "Cell-141Pr-AQP4" = "AQP4",
+  "Cell-143Nd-SQSTM1" = "SQSTM1",
+  "Cell-145Nd-UBQLN2" = "UBQLN2",
+  "Cell-147Sm-Glutaminase" = "GLS",
+  "Cell-149Sm-C9orf72" = "NeuN",
+  "Cell-150Nd-PDL1" = "PDL1",
+  "Cell-151Eu-MAP2" = "MAP2",
+  "Cell-152Sm-ATXN2" = "ATXN2",
+  "Cell-153Eu-ORF1" = "ORF1",
+  "Cell-154Sm-pTDP43" = "pTDP43",
+  "Cell-155Gd-FoxP3" = "FOXP3",
+  "Cell-156Gd-CH24H" = "CH24H",
+  "Cell-158Gd-GFAP" = "GFAP",
+  "Cell-159Tb-IL6ST" = "IL6ST",
+  "Cell-160Gd-IBA1" = "IBA1",
+  "Cell-161Dy-CX3CR1" = "CX3CR1",
+  "Cell-162Dy-pTBK1" = "pTBK1",
+  "Cell-163Dy-CD4" = "CD4",
+  "Cell-164Dy-TMEM119" = "TMEM119",
+  "Cell-165Ho-PD1" = "PD1",
+  "Cell-166Er-GAD67" = "GAD67",
+  "Cell-167Er-CD8" = "CD8",
+  "Cell-168Er-FUS" = "FUS",
+  "Cell-169Tm-ChAT" = "ChAT",
+  "Cell-170Er-APOE" = "APOE",
+  "Cell-171Yb-TREM2" = "TREM2",
+  "Cell-172Yb-PDL2" = "PDL2",
+  "Cell-174Yb-MHCclassII" = "MHCII",
+  "Cell-175Lu-TDP43" = "TDP43",
+  "Cell-176Yb-TBK1" = "TBK1"
+)
+
+```
+
+## Dotplot
+# Astro
+```{r}
+sel_markers <- c("Cell-154Sm-pTDP43",
+                 "Cell-145Nd-UBQLN2",
+                 "Cell-147Sm-Glutaminase",
+                 "Cell-171Yb-TREM2")
+
+marker_labels <- c(
+  "Cell-154Sm-pTDP43"      = "pTDP43",
+  "Cell-145Nd-UBQLN2"      = "UBQLN2",
+  "Cell-147Sm-Glutaminase" = "GLS",
+  "Cell-171Yb-TREM2"       = "TREM2"
+)
+
+temp <- subset(combined_seurat, subset = Celltype %in% c("Astrocyte"))
+
+vln_data <- FetchData(
+  temp,
+  vars = c(sel_markers, "Subcelltype", "major_group"),
+  slot = "data"
+)
+
+
+sub_levels <- vln_data %>%
+  distinct(Subcelltype) %>%
+  pull(Subcelltype) %>%
+  unique()
+
+sub_levels <- c("Astro_1","Astro_2","Astro_3","Astro_4","Astro_5", "") 
+
+if (all(grepl("^[A-Za-z]+\\d+$", sub_levels))) {
+  sub_levels <- sub_levels[order(as.integer(gsub("^[A-Za-z]+", "", sub_levels)))]
+} else {
+  sub_levels <- sort(sub_levels)
+}
+
+
+mean_df <- vln_data %>%
+  pivot_longer(cols = all_of(sel_markers),
+               names_to = "marker",
+               values_to = "expr") %>%
+  group_by(marker, Subcelltype, major_group) %>%
+  summarise(mean_expr = mean(expr, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    marker     = factor(marker, levels = rev(sel_markers)),
+    Subcelltype = factor(Subcelltype, levels = sub_levels),
+    major_group = factor(major_group, levels = c("ALS", "Control"))
+  )
+
+marker_mean_df <- vln_data %>%
+  pivot_longer(cols = all_of(sel_markers),
+               names_to = "marker",
+               values_to = "expr") %>%
+  group_by(marker) %>%
+  summarise(marker_mean_expr = mean(expr, na.rm = TRUE),
+            .groups = "drop")
+
+mean_df <- mean_df %>%
+  left_join(marker_mean_df, by = "marker") %>%
+  mutate(
+    percent_expr = (mean_expr / marker_mean_expr) * 100
+  )
+
+dot_df_scaled <- mean_df %>%
+  group_by(marker) %>%
+  mutate(
+    mean_expr_scaled = scale(mean_expr)[,1],
+     ) %>%
+  ungroup()
+
+dot_df_scaled <- dot_df_scaled %>%
+  mutate(Subcelltype = factor(Subcelltype, levels = sub_levels))
+
+p <- ggplot(dot_df_scaled,
+            aes(x = Subcelltype,
+                y = marker,
+                size = percent_expr,
+                color = mean_expr_scaled)) +
+  geom_point(alpha = 0.9) +
+  facet_grid(. ~ major_group, scales = "free_x", space = "free_x") +
+ scale_y_discrete(
+  limits = rev(sel_markers),
+  labels = marker_labels
+)+
+  scale_x_discrete(limits = sub_levels, drop = FALSE) +
+ scale_size_area(
+  max_size = 12,
+     limits = c(0, 200),
+    breaks = c(75, 100, 200),
+  labels = c("75%", "100%", "200%"),
+    oob = scales::squish
+  ) +  
+  scale_color_gradient2(low = "lightgray", high = "red", mid = "white", 
+                       limits = c(-1.5, 1.5), oob = scales::squish) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.title.x = element_blank(),# axis.title.y = element_text(size = 10),
+     axis.title.y = element_blank(), #axis.title.x = element_text(size = 10),
+     axis.text.x = element_blank(), #axis.text.x  = element_text(size = 10, angle = 45, hjust = 1, vjust = 1),
+    axis.text.y = element_blank(), #axis.text.y  = element_text(size = 10),
+    legend.title = element_text(size = 6),
+    legend.text  = element_text(size = 6),
+    plot.title   = element_text(size = 12),
+    axis.line = element_line(color = "black", linewidth = 0.5)
+  ) +
+  labs(size="Mean expression\n(%)", color="Z-scaled\nexpression")
+
+print(p)
+
+```
+
+# Immune
+```{r}
+temp <- subset(combined_seurat, subset = Celltype %in% c("Immune"))
+
+vln_data <- FetchData(
+  temp,
+  vars = c(sel_markers, "Subcelltype", "major_group"),
+  slot = "data"
+)
+
+
+sub_levels <- vln_data %>%
+  distinct(Subcelltype) %>%
+  pull(Subcelltype) %>%
+  unique()
+
+sub_levels <- c("Immune_1","Immune_2","Immune_3",""," ", "   ") 
+
+if (all(grepl("^[A-Za-z]+\\d+$", sub_levels))) {
+  sub_levels <- sub_levels[order(as.integer(gsub("^[A-Za-z]+", "", sub_levels)))]
+} else {
+  sub_levels <- sort(sub_levels)
+}
+
+
+mean_df <- vln_data %>%
+  pivot_longer(cols = all_of(sel_markers),
+               names_to = "marker",
+               values_to = "expr") %>%
+  group_by(marker, Subcelltype, major_group) %>%
+  summarise(mean_expr = mean(expr, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    marker     = factor(marker, levels = rev(sel_markers)),
+    Subcelltype = factor(Subcelltype, levels = sub_levels),
+    major_group = factor(major_group, levels = c("ALS", "Control"))
+  )
+
+marker_mean_df <- vln_data %>%
+  pivot_longer(cols = all_of(sel_markers),
+               names_to = "marker",
+               values_to = "expr") %>%
+  group_by(marker) %>%
+  summarise(marker_mean_expr = mean(expr, na.rm = TRUE),
+            .groups = "drop")
+
+mean_df <- mean_df %>%
+  left_join(marker_mean_df, by = "marker") %>%
+  mutate(
+    percent_expr = (mean_expr / marker_mean_expr) * 100
+  )
+
+dot_df_scaled <- mean_df %>%
+  group_by(marker) %>%
+  mutate(
+    mean_expr_scaled = scale(mean_expr)[,1],
+     ) %>%
+  ungroup()
+
+dot_df_scaled <- dot_df_scaled %>%
+  mutate(Subcelltype = factor(Subcelltype, levels = sub_levels))
+
+p <- ggplot(dot_df_scaled,
+            aes(x = Subcelltype,
+                y = marker,
+                size = percent_expr,
+                color = mean_expr_scaled)) +
+  geom_point(alpha = 0.9) +
+  facet_grid(. ~ major_group, scales = "free_x", space = "free_x") +
+ scale_y_discrete(
+  limits = rev(sel_markers),
+  labels = marker_labels
+)+
+  scale_x_discrete(limits = sub_levels, drop = FALSE) +
+ scale_size_area(
+  max_size = 12,
+     limits = c(0, 200),
+    breaks = c(75, 100, 200),
+  labels = c("75%", "100%", "200%"),
+    oob = scales::squish
+  ) +  
+  scale_color_gradient2(low = "lightgray", high = "#FFAA00",  mid = "white", 
+                       limits = c(-1.5, 1.5), oob = scales::squish) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.title.x = element_blank(),# axis.title.y = element_text(size = 10),
+     axis.title.y = element_blank(), #axis.title.x = element_text(size = 10),
+     axis.text.x = element_blank(), #axis.text.x  = element_text(size = 10, angle = 45, hjust = 1, vjust = 1),
+    axis.text.y = element_blank(), #axis.text.y  = element_text(size = 10),
+    legend.title = element_text(size = 6),
+    legend.text  = element_text(size = 6),
+    plot.title   = element_text(size = 12),
+    axis.line = element_line(color = "black", linewidth = 0.5)
+  ) +
+  labs(size="Mean expression\n(%)", color="Z-scaled\nexpression")
+
+print(p)
+```
+
+# Excitatory
+```{r}
+
+temp <- subset(combined_seurat, subset = Celltype %in% c("Excitatory"))
+
+vln_data <- FetchData(
+  temp,
+  vars = c(sel_markers, "Subcelltype", "major_group"),
+  slot = "data"
+)
+
+
+sub_levels <- vln_data %>%
+  distinct(Subcelltype) %>%
+  pull(Subcelltype) %>%
+  unique()
+
+sub_levels <- c("Exc_1","Exc_2","Exc_3","Exc_4","Exc_5","") 
+
+if (all(grepl("^[A-Za-z]+\\d+$", sub_levels))) {
+  sub_levels <- sub_levels[order(as.integer(gsub("^[A-Za-z]+", "", sub_levels)))]
+} else {
+  sub_levels <- sort(sub_levels)
+}
+
+
+mean_df <- vln_data %>%
+  pivot_longer(cols = all_of(sel_markers),
+               names_to = "marker",
+               values_to = "expr") %>%
+  group_by(marker, Subcelltype, major_group) %>%
+  summarise(mean_expr = mean(expr, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    marker     = factor(marker, levels = rev(sel_markers)),
+    Subcelltype = factor(Subcelltype, levels = sub_levels),
+    major_group = factor(major_group, levels = c("ALS", "Control"))
+  )
+
+marker_mean_df <- vln_data %>%
+  pivot_longer(cols = all_of(sel_markers),
+               names_to = "marker",
+               values_to = "expr") %>%
+  group_by(marker) %>%
+  summarise(marker_mean_expr = mean(expr, na.rm = TRUE),
+            .groups = "drop")
+
+mean_df <- mean_df %>%
+  left_join(marker_mean_df, by = "marker") %>%
+  mutate(
+    percent_expr = (mean_expr / marker_mean_expr) * 100
+  )
+
+dot_df_scaled <- mean_df %>%
+  group_by(marker) %>%
+  mutate(
+    mean_expr_scaled = scale(mean_expr)[,1],
+     ) %>%
+  ungroup()
+
+dot_df_scaled <- dot_df_scaled %>%
+  mutate(Subcelltype = factor(Subcelltype, levels = sub_levels))
+
+p <- ggplot(dot_df_scaled,
+            aes(x = Subcelltype,
+                y = marker,
+                size = percent_expr,
+                color = mean_expr_scaled)) +
+  geom_point(alpha = 0.9) +
+  facet_grid(. ~ major_group, scales = "free_x", space = "free_x") +
+ scale_y_discrete(
+  limits = rev(sel_markers),
+  labels = marker_labels
+)+
+  scale_x_discrete(limits = sub_levels, drop = FALSE) +
+ scale_size_area(
+  max_size = 12,
+     limits = c(0, 200),
+    breaks = c(75, 100, 200),
+  labels = c("75%", "100%", "200%"),
+    oob = scales::squish
+  ) +  
+  scale_color_gradient2(low = "lightgray", high = "#005CE6",  mid = "white", 
+                       limits = c(-1.5, 1.5), oob = scales::squish) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.title.x = element_blank(),# axis.title.y = element_text(size = 10),
+     axis.title.y = element_blank(), #axis.title.x = element_text(size = 10),
+     axis.text.x = element_blank(), #axis.text.x  = element_text(size = 10, angle = 45, hjust = 1, vjust = 1),
+    axis.text.y = element_blank(), #axis.text.y  = element_text(size = 10),
+    legend.title = element_text(size = 6),
+    legend.text  = element_text(size = 6),
+    plot.title   = element_text(size = 12),
+    axis.line = element_line(color = "black", linewidth = 0.5)
+  ) +
+  labs(size="Mean expression\n(%)", color="Z-scaled\nexpression")
+
+print(p)
+
+```
+
+## Euclidean distance
+# Astro
+```{r}
+
+sel_markers <- c("Cell-154Sm-pTDP43",
+                 "Cell-147Sm-Glutaminase",
+                 "Cell-145Nd-UBQLN2",
+                 "Cell-171Yb-TREM2")
+
+temp <- subset(combined_seurat, subset = Celltype %in% c("Astrocyte"))
+mat <- GetAssayData(temp, assay = "Protein", slot = "counts")[sel_markers, ]
+
+
+mat_z <- t(scale(t(mat))) 
+df <- as.data.frame(t(mat_z)) 
+mat_shift <- mat_z + 3
+
+mat_shift[mat_shift < 0] <- 0
+df <- as.data.frame(t(mat_shift))
+
+
+for (marker in sel_markers) {
+  hist(
+    mat_z[marker, ], 
+    breaks = 40,
+    col = "orange",
+    main = paste("Z-scored", marker),
+    xlab = "Z-score",
+    border = "white"
+  )
+}
+
+for (marker in sel_markers) {
+  hist(
+    mat_shift[marker, ], 
+    breaks = 40,
+    col = "orange",
+    main = paste("Z-scored+3", marker),
+    xlab = "Z-score",
+    border = "white"
+  )
+}
+
+
+
+df$score <- apply(df, 1, function(x) sum(x^2))
+
+df$Subcelltype <- temp$Subcelltype
+df$major_group <- temp$major_group
+df$group<-interaction(df$major_group, df$Subcelltype, drop = TRUE)
+
+
+
+df$group <- factor(
+  df$group,
+  levels = c(
+     paste0("ALS.Astro_", 1:5),
+      paste0("Control.Astro_", 1:5)))
+
+
+mean_score_df <- df %>%
+  group_by(group) %>%
+  summarise(mean_score = mean(score, na.rm = TRUE), .groups = "drop")
+
+
+mean_score_df <- df %>%
+  group_by(group) %>%
+  summarise(
+    mean_score = mean(score, na.rm = TRUE),
+    se_score   = sd(score, na.rm = TRUE) / sqrt(dplyr::n()),
+    .groups = "drop"
+  )
+   
+
+dodge_width <- 0.8
+
+p <- ggplot(df,
+            aes(x = group,
+                y = score,
+                color = major_group)) +
+  geom_jitter(
+    alpha = 0.8,
+    size  = 0.1,
+    width = 0.2
+  ) +
+  geom_crossbar(
+    data = mean_score_df,
+    aes(x = group,
+        y = mean_score,
+        ymin = mean_score,
+        ymax = mean_score),
+    inherit.aes = FALSE,
+    width = 0.6,
+    linewidth = 0.3,
+    color = "black"
+  ) +
+  geom_errorbar(
+  data = mean_score_df,
+  aes(
+    x = group,
+    ymin = mean_score - se_score,
+    ymax = mean_score + se_score
+  ),
+   inherit.aes = FALSE,
+  width = 0.4,
+  color = "black",
+  linewidth = 0.6
+)+
+  scale_color_manual(values = c("ALS" = "red", "Control" = "blue")) +
+scale_y_continuous(expand = c(0,0))+
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Expression (sum x^2)",
+    x= NULL,
+    y = "AU"
+  ) +
+  theme(
+    plot.title      = element_text(size = 12, color = "black"),
+    axis.text.x     = element_text(size = 8, color = "black", angle=45, hjust=1),
+    axis.text.y     = element_text(size = 10, color = "black"),
+    axis.title.y    = element_text(size = 14, color = "black"),
+    legend.position = "none",
+    axis.line       = element_line(color = "black", size = 0.5),
+    axis.ticks.length = unit(5, "pt")
+  )
+
+print(p)
+
+
+df$group <- factor(df$group)
+result <- aov(score ~ group, data = df)
+summary(result)
+
+TukeyHSD(result)
+
+
+
+p<-ggplot(mean_score_df, aes(x = group, y = 1, fill = mean_score)) +
+  geom_tile(color = "white") +
+   scale_fill_gradient(
+    low  = "white",
+    high = "red",
+      name = "Expression (sum x^2)"
+  ) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    axis.title.x  = element_blank(),
+    axis.text.x   = element_text(angle = 45, hjust = 1, size = 8),
+    panel.grid    = element_blank()
+  )
+
+print(p)
+
+
+ write.csv(
+    df,
+    file = paste0(output_folder, "Marker_expression_score_Astrocyte.csv"),
+    row.names = FALSE
+)
+```
+
+# Immune
+```{r}
+temp <- subset(combined_seurat, subset = Celltype %in% c("Immune"))
+mat <- GetAssayData(temp, assay = "Protein", slot = "counts")[sel_markers, ]
+
+
+mat_z <- t(scale(t(mat))) 
+df <- as.data.frame(t(mat_z)) 
+mat_shift <- mat_z + 3
+
+mat_shift[mat_shift < 0] <- 0
+df <- as.data.frame(t(mat_shift))
+
+
+for (marker in sel_markers) {
+  hist(
+    mat_z[marker, ], 
+    breaks = 40,
+    col = "orange",
+    main = paste("Z-scored", marker),
+    xlab = "Z-score",
+    border = "white"
+  )
+}
+
+for (marker in sel_markers) {
+  hist(
+    mat_shift[marker, ], 
+    breaks = 40,
+    col = "orange",
+    main = paste("Z-scored+3", marker),
+    xlab = "Z-score",
+    border = "white"
+  )
+}
+
+
+
+df$score <- apply(df, 1, function(x) sum(x^2))
+
+df$Subcelltype <- temp$Subcelltype
+df$major_group <- temp$major_group
+df$group<-interaction(df$major_group, df$Subcelltype, drop = TRUE)
+
+
+
+df$group <- factor(
+  df$group,
+  levels = c(
+     paste0("ALS.Immune_", 1:5),
+      paste0("Control.Immune_", 1:5)))
+
+
+mean_score_df <- df %>%
+  group_by(group) %>%
+  summarise(mean_score = mean(score, na.rm = TRUE), .groups = "drop")
+
+
+mean_score_df <- df %>%
+  group_by(group) %>%
+  summarise(
+    mean_score = mean(score, na.rm = TRUE),
+    se_score   = sd(score, na.rm = TRUE) / sqrt(dplyr::n()),
+    .groups = "drop"
+  )
+   
+
+dodge_width <- 0.8
+
+p <- ggplot(df,
+            aes(x = group,
+                y = score,
+                color = major_group)) +
+  geom_jitter(
+    alpha = 0.8,
+    size  = 0.1,
+    width = 0.2
+  ) +
+  geom_crossbar(
+    data = mean_score_df,
+    aes(x = group,
+        y = mean_score,
+        ymin = mean_score,
+        ymax = mean_score),
+    inherit.aes = FALSE,
+    width = 0.6,
+    linewidth = 0.3,
+    color = "black"
+  ) +
+  geom_errorbar(
+  data = mean_score_df,
+  aes(
+    x = group,
+    ymin = mean_score - se_score,
+    ymax = mean_score + se_score
+  ),
+   inherit.aes = FALSE,
+  width = 0.4,
+  color = "black",
+  linewidth = 0.6
+)+
+  scale_color_manual(values = c("ALS" = "red", "Control" = "blue")) +
+scale_y_continuous(expand = c(0,0))+
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Expression (sum x^2)",
+    x= NULL,
+    y = "AU"
+  ) +
+  theme(
+    plot.title      = element_text(size = 12, color = "black"),
+    axis.text.x     = element_text(size = 8, color = "black", angle=45, hjust=1),
+    axis.text.y     = element_text(size = 10, color = "black"),
+    axis.title.y    = element_text(size = 14, color = "black"),
+    legend.position = "none",
+    axis.line       = element_line(color = "black", size = 0.5),
+    axis.ticks.length = unit(5, "pt")
+  )
+
+print(p)
+
+ 
+df$group <- factor(df$group)
+result <- aov(score ~ group, data = df)
+summary(result)
+
+TukeyHSD(result)
+
+p<-ggplot(mean_score_df, aes(x = group, y = 1, fill = mean_score)) +
+    geom_tile(color = "white") +
+   scale_fill_gradient(
+    low  = "white",
+    high = "#FFAA00",
+    name = "Expression (sum x^2)"
+  ) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    axis.title.x  = element_blank(),
+    axis.text.x   = element_text(angle = 45, hjust = 1, size = 8),
+    panel.grid    = element_blank()
+  )
+
+print(p)
+
+
+write.csv(
+    df,
+    file = paste0(output_folder, "Marker_expression_score_Immune.csv"),
+    row.names = FALSE
+)
+```
+
+# Excitatory
+```{r}
+
+temp <- subset(combined_seurat, subset = Celltype %in% c("Excitatory"))
+mat <- GetAssayData(temp, assay = "Protein", slot = "counts")[sel_markers, ]
+
+
+mat_z <- t(scale(t(mat))) 
+df <- as.data.frame(t(mat_z)) 
+mat_shift <- mat_z + 3
+
+mat_shift[mat_shift < 0] <- 0
+df <- as.data.frame(t(mat_shift))
+
+
+for (marker in sel_markers) {
+  hist(
+    mat_z[marker, ], 
+    breaks = 40,
+    col = "orange",
+    main = paste("Z-scored", marker),
+    xlab = "Z-score",
+    border = "white"
+  )
+}
+
+for (marker in sel_markers) {
+  hist(
+    mat_shift[marker, ], 
+    breaks = 40,
+    col = "orange",
+    main = paste("Z-scored+3", marker),
+    xlab = "Z-score",
+    border = "white"
+  )
+}
+
+
+
+df$score <- apply(df, 1, function(x) sum(x^2))
+
+df$Subcelltype <- temp$Subcelltype
+df$major_group <- temp$major_group
+df$group<-interaction(df$major_group, df$Subcelltype, drop = TRUE)
+
+
+
+df$group <- factor(
+  df$group,
+  levels = c(
+     paste0("ALS.Exc_", 1:5),
+      paste0("Control.Exc_", 1:5)))
+
+
+mean_score_df <- df %>%
+  group_by(group) %>%
+  summarise(mean_score = mean(score, na.rm = TRUE), .groups = "drop")
+
+
+mean_score_df <- df %>%
+  group_by(group) %>%
+  summarise(
+    mean_score = mean(score, na.rm = TRUE),
+    se_score   = sd(score, na.rm = TRUE) / sqrt(dplyr::n()),
+    .groups = "drop"
+  )
+   
+
+dodge_width <- 0.8
+
+p <- ggplot(df,
+            aes(x = group,
+                y = score,
+                color = major_group)) +
+  geom_jitter(
+    alpha = 0.8,
+    size  = 0.1,
+    width = 0.2
+  ) +
+  geom_crossbar(
+    data = mean_score_df,
+    aes(x = group,
+        y = mean_score,
+        ymin = mean_score,
+        ymax = mean_score),
+    inherit.aes = FALSE,
+    width = 0.6,
+    linewidth = 0.3,
+    color = "black"
+  ) +
+  geom_errorbar(
+  data = mean_score_df,
+  aes(
+    x = group,
+    ymin = mean_score - se_score,
+    ymax = mean_score + se_score
+  ),
+   inherit.aes = FALSE,
+  width = 0.4,
+  color = "black",
+  linewidth = 0.6
+)+
+  scale_color_manual(values = c("ALS" = "red", "Control" = "blue")) +
+scale_y_continuous(expand = c(0,0))+
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Expression (sum x^2)",
+    x= NULL,
+    y = "AU"
+  ) +
+  theme(
+    plot.title      = element_text(size = 12, color = "black"),
+    axis.text.x     = element_text(size = 8, color = "black", angle=45, hjust=1),
+    axis.text.y     = element_text(size = 10, color = "black"),
+    axis.title.y    = element_text(size = 14, color = "black"),
+    legend.position = "none",
+    axis.line       = element_line(color = "black", size = 0.5),
+    axis.ticks.length = unit(5, "pt")
+  )
+
+print(p)
+
+
+df$group <- factor(df$group)
+result <- aov(score ~ group, data = df)
+summary(result)
+
+TukeyHSD(result)
+
+p<-ggplot(mean_score_df, aes(x = group, y = 1, fill = mean_score)) +
+  geom_tile(color = "white") +
+   scale_fill_gradient(
+    low  = "white",
+    high = "#005CE6",
+    name = "Expression (sum x^2)"
+  ) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    axis.title.x  = element_blank(),
+    axis.text.x   = element_text(angle = 45, hjust = 1, size = 8),
+    panel.grid    = element_blank()
+  )
+
+print(p)
+
+write.csv(
+    df,
+    file = paste0(output_folder, "Marker_expression_score_Exc.csv"),
+    row.names = FALSE
+)
+```

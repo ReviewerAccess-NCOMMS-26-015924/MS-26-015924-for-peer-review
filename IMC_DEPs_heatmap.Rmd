@@ -1,0 +1,252 @@
+# =============================================================================
+# IMC_DEPs_heatmap.R
+#
+# Description:
+# This script computes differential marker expression between ALS and control
+# groups within each major cell type from the integrated Imaging Mass
+# Cytometry (IMC) Seurat object and visualizes the results as a heatmap.
+#
+# Author:
+# Momoka Hikosaka
+# Kyoto University
+#
+# Associated publication:
+# Hikosaka et al. in review
+# "Glial metabolic states in human sporadic amyotrophic lateral sclerosis
+# uncovered by spatial single-cell proteomics."
+#
+# Input:
+# - Integrated Seurat object
+#
+# Output:
+# - Heatmap showing differential marker expression across cell types
+#
+# Notes:
+# Analysis parameters are currently configured for the Precentral gyrus dataset.
+# For analyses of other brain regions, please refer to "IMC_analysis_paramaters.txt"
+#
+# License:
+# Copyright (c) 2025 Momoka Hikosaka
+# This code is provided for academic research purposes.
+# =============================================================================
+
+
+## Environment cleanup
+```{r}
+rm(list = ls())  
+```
+
+## Load required packages
+```{r}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(dplyr)
+  library(harmony)
+  library(tidyverse)
+  library(ggplot2)
+  library(viridis)
+  library(patchwork)
+  library(harmony)
+  library(cowplot)
+  library(tools)
+  library(forcats) 
+})
+```
+
+## Output directory
+```{r}
+output_folder <- "output"
+if (!dir.exists(output_folder)) {
+  dir.create(output_folder)
+}
+```
+
+## Load previously saved object
+```{r}
+combined_seurat <- readRDS(
+   file = file.path("rds/combined_seurat_PrecentralGyrus.rds")
+)
+```
+
+## Markers info
+```{r}
+Markers_astro <- c("Cell-141Pr-AQP4", "Cell-158Gd-GFAP")
+Markers_immune <- c("Cell-161Dy-CX3CR1", "Cell-164Dy-TMEM119","Cell-160Gd-IBA1","Cell-163Dy-CD4", "Cell-155Gd-FoxP3", "Cell-167Er-CD8")
+Markers_neuron <- c("Cell-151Eu-MAP2","Cell-149Sm-C9orf72", "Cell-169Tm-ChAT","Cell-166Er-GAD67")
+Markers_others <- c("Cell-175Lu-TDP43",
+"Cell-154Sm-pTDP43",
+"Cell-168Er-FUS",
+"Cell-152Sm-ATXN2",
+"Cell-145Nd-UBQLN2",
+"Cell-170Er-APOE",
+"Cell-176Yb-TBK1",
+"Cell-162Dy-pTBK1",
+"Cell-147Sm-Glutaminase",
+"Cell-143Nd-SQSTM1",
+"Cell-156Gd-CH24H",
+"Cell-153Eu-ORF1",
+"Cell-159Tb-IL6ST",
+"Cell-165Ho-PD1",
+"Cell-150Nd-PDL1",
+"Cell-172Yb-PDL2",
+"Cell-171Yb-TREM2",
+"Cell-174Yb-MHCclassII"
+)
+
+Markers <- c(Markers_astro, Markers_immune, Markers_neuron, Markers_others)
+
+Marker_label <- c(
+  "Cell-141Pr-AQP4" = "AQP4",
+  "Cell-143Nd-SQSTM1" = "SQSTM1",
+  "Cell-145Nd-UBQLN2" = "UBQLN2",
+  "Cell-147Sm-Glutaminase" = "GLS",
+  "Cell-149Sm-C9orf72" = "NeuN",
+  "Cell-150Nd-PDL1" = "PDL1",
+  "Cell-151Eu-MAP2" = "MAP2",
+  "Cell-152Sm-ATXN2" = "ATXN2",
+  "Cell-153Eu-ORF1" = "ORF1",
+  "Cell-154Sm-pTDP43" = "pTDP43",
+  "Cell-155Gd-FoxP3" = "FOXP3",
+  "Cell-156Gd-CH24H" = "CH24H",
+  "Cell-158Gd-GFAP" = "GFAP",
+  "Cell-159Tb-IL6ST" = "IL6ST",
+  "Cell-160Gd-IBA1" = "IBA1",
+  "Cell-161Dy-CX3CR1" = "CX3CR1",
+  "Cell-162Dy-pTBK1" = "pTBK1",
+  "Cell-163Dy-CD4" = "CD4",
+  "Cell-164Dy-TMEM119" = "TMEM119",
+  "Cell-165Ho-PD1" = "PD1",
+  "Cell-166Er-GAD67" = "GAD67",
+  "Cell-167Er-CD8" = "CD8",
+  "Cell-168Er-FUS" = "FUS",
+  "Cell-169Tm-ChAT" = "ChAT",
+  "Cell-170Er-APOE" = "APOE",
+  "Cell-171Yb-TREM2" = "TREM2",
+  "Cell-172Yb-PDL2" = "PDL2",
+  "Cell-174Yb-MHCclassII" = "MHCII",
+  "Cell-175Lu-TDP43" = "TDP43",
+  "Cell-176Yb-TBK1" = "TBK1"
+)
+
+```
+
+# Heatmap drawing
+```{r}
+
+celltypes_use <- c("Astrocyte", "Immune", "Excitatory", "Inhibitory", "Others")
+celltypes_use <- intersect(celltypes_use, unique(combined_seurat$Celltype))
+
+selected_markers <- c(Markers_others)
+
+compute_stats_one <- function(seu, celltype, markers,
+                              assay = "Protein", slot = "counts") {
+  obj <- subset(
+    seu,
+    subset = Celltype == celltype & major_group %in% c("ALS","Control")
+  )
+  
+   mat <- GetAssayData(obj, assay = assay, slot = slot)
+  
+   als_cells <- WhichCells(obj, expression = major_group == "ALS")
+   ctrl_cells <- WhichCells(obj, expression = major_group == "Control")
+   
+   mean_als    <- rowMeans(mat[, als_cells, drop = FALSE])
+   mean_ctrl   <- rowMeans(mat[, ctrl_cells, drop = FALSE])
+   mean_all    <- rowMeans(mat)
+
+   sd_als  <- apply(mat[, als_cells, drop = FALSE], 1, sd)
+   sd_ctrl <- apply(mat[, ctrl_cells, drop = FALSE], 1, sd)
+
+   n_als  <- length(als_cells)
+   n_ctrl <- length(ctrl_cells)
+   
+   s_pooled <- sqrt(
+    ((n_als - 1)  * sd_als^2 +
+       (n_ctrl - 1) * sd_ctrl^2) /
+      (n_als + n_ctrl - 2)
+   )
+ 
+   cohens_d <- (mean_als - mean_ctrl) / s_pooled
+   log2fc   <- log2((mean_als + 1) / (mean_ctrl + 1)) 
+  
+  ## Wilcoxon 
+  p_values <- apply(mat, 1, function(x) {
+    wilcox.test(x[als_cells], x[ctrl_cells])$p.value
+  })
+  p_adj   <- p.adjust(p_values, method = "BH")
+  log10_p <- -log10(p_adj)
+
+  ## q = |d| * -log10(FDR)
+  q_values <- abs(cohens_d) * log10_p
+  signif_label <- ifelse(q_values > 10, "*", "")
+  
+   df <- data.frame(
+    Gene        = rownames(mat),
+    Celltype    = celltype,
+    log2FC      = log2fc,
+    Ave_ALS     = mean_als,
+    Ave_Control = mean_ctrl,
+    Ave_all     = mean_all,
+    CohensD     = cohens_d,
+    p_val       = p_values,
+    p_val_adj   = p_adj,
+    log10_p     = log10_p,
+    q_value     = q_values,
+    Significance = signif_label,
+    stringsAsFactors = FALSE
+  ) 
+  
+   df <- df[df$Gene %in% markers, , drop = FALSE]
+  } 
+  
+  stats_list <- lapply(
+  celltypes_use,
+  compute_stats_one,
+  seu     = combined_seurat,
+  markers = selected_markers
+)
+  stats_all <- bind_rows(stats_list)
+  
+  
+  
+  marker_order <- selected_markers[selected_markers %in% stats_all$Gene]
+
+stats_all$Gene <- factor(
+  stats_all$Gene,
+  levels = rev(marker_order)
+)
+
+stats_all$Celltype <- factor(
+  stats_all$Celltype,
+  levels = celltypes_use
+)
+
+max_d <- 1.5  
+
+p <- ggplot(stats_all,
+            aes(x = Celltype, y = Gene, fill = CohensD)) +
+  geom_tile(color = "white", size = 1) +
+  geom_text(aes(label = Significance),
+            color = "black", size = 10, vjust = 0.8) +
+  scale_fill_gradientn(
+   colours = c("blue", "#F2F2F2", "white", "#F2F2F2","red", "red"), 
+      values = scales::rescale(c(-2, -0.2, 0, 0.2, 1.5,2)),
+   
+    limits  = c(-max_d, max_d),
+    oob     = scales::squish,
+    name    = "Cohen's d\n(ALS − Control)"
+  ) +
+  scale_y_discrete(labels = Marker_label[rev(marker_order)]) +
+  theme_classic() +
+  theme(
+    axis.title = element_blank(),
+    axis.text.x = element_text(angle = 60, hjust = 1, vjust = 1,
+                               size = 14, color = "black"),
+    axis.text.y = element_text(size = 14, color = "black"),
+    legend.position = "right"
+  )
+
+print(p)
+ 
+```
+
