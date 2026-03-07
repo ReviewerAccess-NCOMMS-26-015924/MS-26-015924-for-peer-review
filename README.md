@@ -13,6 +13,7 @@ o	IMC signal filtering
 o	Nuclear detection correction
 
 o	Field-of-view (FOV) correction
+
 2.	IMC Proteomics Clustering (R)
 3.	ALS Distance Analysis (MATLAB)
 4.	Public Data Analysis (R)
