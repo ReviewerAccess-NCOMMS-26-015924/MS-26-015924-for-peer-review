@@ -21,12 +21,16 @@ ________________________________________
 Module Descriptions
 1. IMC Preprocessing (MATLAB)
 We provide the preprocessing code used to correct IMC signal detection errors, nuclear detection errors, and field-of-view (FOV) boundaries. After applying these preprocessing steps, a flag called Sel01 is added to each cell. Cells marked with Sel01 = 1 indicate cells retained for downstream analyses.
+
 o	IMC signal filtering
 To remove putative signal detection errors, manual upper-threshold filtering is applied. Cells with expression values above a manually selected threshold are replaced with NaN in the output table.
+
 o	Nuclear detection correction (Matlab)
 For refinement of single-cell identification with Cell Profiler v4.2.1 and histoCAT, we developed a custom MATLAB-based computational algorithm to identify multiple detections originating from the same cell, thereby maximizing the accuracy of cell-identification.
+
 o	Field-of-view (FOV) correction (Matlab)
 We also implemented a field-of-view (FOV) correction code that refines the region used for analysis in IMC spatial data, particularly for spinal cord tissue.
+
 ________________________________________
 2. IMC Proteomics Clustering (R)
 We provide the code used for clustering IMC-derived single-cell proteomic data.
