@@ -20,6 +20,7 @@ o	Field-of-view (FOV) correction
 ________________________________________
 Module Descriptions
 1. IMC Preprocessing (MATLAB)
+
 We provide the preprocessing code used to correct IMC signal detection errors, nuclear detection errors, and field-of-view (FOV) boundaries. After applying these preprocessing steps, a flag called Sel01 is added to each cell. Cells marked with Sel01 = 1 indicate cells retained for downstream analyses.
 
 The IMC proteomics data have been deposited in Zenodo (an open-access repository developed under the European OpenAIRE program and operated by CERN) under the accession number DOI: 10.5281/zenodo.18823151. Please locate the folder “IMC_preprocessing_raw_csv” and use the data contained within.
@@ -38,6 +39,7 @@ We also implemented a field-of-view (FOV) correction code that refines the regio
 
 ________________________________________
 2. IMC Clustering (R)
+
 We provide the code used for proteomics clustering IMC-derived single-cell proteomic data, "preprocessed_csv” files in the associated folder.
 
 The IMC proteomics data have been deposited in Zenodo (an open-access repository developed under the European OpenAIRE program and operated by CERN) under the accession number DOI: 10.5281/zenodo.18823151. Please locate the folder “IMC_clustering_rds” and use the data contained within.
@@ -69,6 +71,7 @@ For parameter settings used for other brain regions, please refer to IMC_analysi
  
 ________________________________________
 3. ALS Distance Analysis (MATLAB)
+
 This module contains MATLAB scripts used to analyze spatial relationships among distinct cell clusters.
 
 The algorithm:
@@ -98,6 +101,7 @@ ALS_Distance_Analysis_Total_analysis_260306_hikosaka.m
 
 ________________________________________
 4. Public Data Analysis (R)
+
 We provide R scripts used to analyze publicly available single-cell RNA-seq data from ALS and control samples (GEO: GSE174332; Pineda et al., Cell 2024) (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE174332).
 
 GSM5292194  201019_ALS_101_snRNA-B1
