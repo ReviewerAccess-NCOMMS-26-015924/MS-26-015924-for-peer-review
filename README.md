@@ -100,6 +100,7 @@ scRNAseq_Seurat.rmd
 This script performs Seurat-based integration and clustering analysis of publicly available single-cell RNA-seq data from ALS and control samples.
  
 scRNAseq_expression.rmd
+
 This script loads a Seurat object and performs gene expression visualization and statistical analysis.
 ________________________________________
 Notes
