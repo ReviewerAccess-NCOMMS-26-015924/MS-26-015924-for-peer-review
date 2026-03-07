@@ -1,0 +1,337 @@
+# =============================================================================
+# scRNAseq_expression.R
+#
+# Description:
+# This script loads a integrated Seurat object and
+# performs gene expression visualization and statistical analysis.
+#
+# Author:
+# Md. Shamim Hossain, Momoka Hikosaka, Suthinee Attachaipanich
+# Institute of Rheology Functions of Food, Kyoto University
+#
+# Associated publication:
+# Hikosaka et al. in review
+# "Glial metabolic states in human sporadic amyotrophic lateral sclerosis
+# uncovered by spatial single-cell proteomics."
+#
+# Input:
+# - Integrated Seurat object
+#
+# Output:
+# - Violin plots of gene expression per cell type
+# - Dot plots summarizing differential expression
+# - Statistical test results (Wilcoxon test)
+#
+# License:
+# Copyright (c) 2025  Md. Shamim Hossain, Momoka Hikosaka, Suthinee Attachaipanich
+# This code is provided for academic research purposes.
+# =============================================================================
+
+## Environment cleanup
+```{r}
+rm(list = ls())  
+```
+
+## Load required packages
+```{r}
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(Seurat)
+  library(patchwork)
+  library(tidyverse)
+  library(gtools)
+  library(harmony)
+  library(ggrepel)
+  library(ggplot2)
+})
+```
+
+## Output directory
+```{r}
+output_folder <- "output"
+if (!dir.exists(output_folder)) {
+  dir.create(output_folder)
+}
+```
+
+## Load previously saved object
+```{r}
+Int <- readRDS(
+  file = file.path("rds/Pineda.Int.rds")
+)
+
+table(Int$CellClass)
+table(Int$CellType)
+
+Idents(Int) = Int$CellType
+DimPlot(Int, label =T)
+```
+
+# Violin plot
+```{r}
+celltypes <- c("Astro","Micro")
+#"Endo","Fibro","Micro","Mural","Oligo","OPC","T_Cell","Oligo","L5_L6"
+
+genes_of_interest <- c("GLS","GLS2","TP53","MYC")
+#"ATM","CHEK2","BBC3","NFE2L2","BAX","CDKN1A","MAPK14","MAPK11","MAP3K20","MAPK8","MAPK9","MAPK10","EIF2AK4","EIF2A"
+#"MAPK14","MAPK11"P38
+#"MAP3K20"ZAK
+#"MAPK8"JNK1
+#"MAPK9"JNK2
+#"MAPK10" JNK3
+#"EIF2AK4","EIF2A"
+
+results_list <- list()
+
+for (ct in celltypes) {
+
+  ct_subset <- subset(Int, subset = CellType == ct)
+
+  for (gene in genes_of_interest) {
+
+    if (!(gene %in% rownames(ct_subset))) {
+      message(gene, " not found in dataset (", ct, ")")
+      next
+    }
+
+    expr_data <- GetAssayData(ct_subset, slot = "counts")[gene, ]
+    cells_to_keep <- colnames(ct_subset)[expr_data > 0]
+
+    if (length(cells_to_keep) == 0) {
+      message("No expressing cells for ", gene, " in ", ct)
+      next
+    }
+
+    filtered_subset <- subset(ct_subset, cells = cells_to_keep)
+
+    p <- VlnPlot(filtered_subset,
+                 features = gene,
+                 group.by = "Condition",
+                 pt.size = 0.05,
+                 cols = c("red", "blue"),
+                 adjust = 2) +
+      coord_cartesian(ylim = c(0, 3.5)) +
+      ggtitle(paste(ct, gene, sep=" : ")) +
+      NoLegend() +
+      geom_boxplot(width = 0.2, outlier.shape = NA, color = "black")
+
+    meta <- filtered_subset@meta.data
+    expr_vals <- GetAssayData(filtered_subset, slot = "data")[gene, ]  
+
+  
+    als_cells <- rownames(meta)[meta$Condition == "ALS"]
+    pn_cells  <- rownames(meta)[meta$Condition == "PN"]
+
+    x <- expr_vals[als_cells]
+    y <- expr_vals[pn_cells]
+
+   
+    min_cells_per_group <- 3
+
+    if (length(x) >= min_cells_per_group && length(y) >= min_cells_per_group) {
+
+      wt <- tryCatch(
+        wilcox.test(x, y, exact = FALSE),
+        error = function(e) NULL
+      )
+
+      if (!is.null(wt) && !is.na(wt$p.value)) {
+
+      mean_ALS <- mean(x, na.rm = TRUE)
+mean_PN  <- mean(y, na.rm = TRUE)
+
+results_list[[length(results_list) + 1]] <- data.frame(
+  CellType = ct,
+  Gene     = gene,
+  n_ALS    = length(x),
+  n_PN     = length(y),
+  Mean_ALS = mean_ALS,
+  Mean_PN  = mean_PN,
+  W_stat   = unname(wt$statistic),
+  p_val    = wt$p.value,
+  stringsAsFactors = FALSE
+)
+       
+
+      } else {
+        results_list[[length(results_list) + 1]] <- data.frame(
+          CellType = ct, Gene = gene,
+          n_ALS = length(x), n_PN = length(y),
+          W_stat = NA_real_, p_val = NA_real_,
+          stringsAsFactors = FALSE
+        )
+      }
+
+    } else {
+      results_list[[length(results_list) + 1]] <- data.frame(
+        CellType = ct, Gene = gene,
+        n_ALS = length(x), n_PN = length(y),
+        W_stat = NA_real_, p_val = NA_real_,
+        stringsAsFactors = FALSE
+      )
+    }
+
+ 
+    print(p)
+
+    file_name <- paste0("Vlnplot_filter_", ct, "_", gene, ".pdf")
+    ggsave(filename = file.path(output_folder, file_name),
+           plot = p, width = 3.5, height = 6, dpi = 300)
+  }
+}
+
+
+results_table <- bind_rows(results_list)
+
+write.csv(results_table,
+          file = file.path(output_folder, "Wilcoxon_results.csv"),
+          row.names = FALSE)
+
+
+```
+
+# Dotplot
+```{r}
+library(dplyr)
+library(ggplot2)
+library(Seurat)
+
+
+celltypes <- c("Astro","Micro","Oligo","L2_L3","L5_L6","PV","SOM")
+genes_of_interest <- c("GRN","LAMP1","LAMP2","CTSD","SQSTM1","TFEB",paste0("blank", 1:10) )
+#"GRN","LAMP1","LAMP2","CTSD","SQSTM1","TFEB"
+#"VIM","NES","CSPG4","VCAN","TNC","COL1A1","COL4A1","FN1","C3","SERPING1","MMP2","MMP9","CD44","S100B", paste0("blank", 1:2) 
+#"TGFB1","TGFB2","TGFB3","TGFBR1","TGFBR2","TGFBR3","SMAD2","SMAD3","SMAD4","SMAD7", paste0("blank", 1:6) 
+#"IL6","IL6R","IL6ST","JAK1","JAK2","JAK3","TYK2","STAT1","STAT2","STAT3", paste0("blank", 1:6)
+
+cond1 <- "ALS"
+cond2 <- "PN"
+
+plot_list <- list()
+
+for (ct in celltypes) {
+
+  obj_ct <- subset(Int, subset = CellType == ct)
+  meta_all <- obj_ct@meta.data
+
+   if (!all(c(cond1, cond2) %in% unique(meta_all$Condition))) next
+
+ for (gene in genes_of_interest) {
+
+    if (!(gene %in% rownames(obj_ct))) next
+
+   
+    expr_all <- GetAssayData(obj_ct, slot = "data")[gene, ]
+    pct_expressed <- mean(expr_all > 0) * 100
+
+   
+    cells_to_keep <- colnames(obj_ct)[expr_all > 0]
+    if (length(cells_to_keep) == 0) next
+
+    filtered_subset <- subset(obj_ct, cells = cells_to_keep)
+    meta_f <- filtered_subset@meta.data
+    if (!all(c(cond1, cond2) %in% unique(meta_f$Condition))) next
+
+    expr_f <- GetAssayData(filtered_subset, slot = "data")[gene, ]
+
+    cond1_cells <- rownames(meta_f)[meta_f$Condition == cond1]
+    cond2_cells <- rownames(meta_f)[meta_f$Condition == cond2]
+    if (length(cond1_cells) < 2 || length(cond2_cells) < 2) next
+
+    mean1 <- mean(expr_f[cond1_cells], na.rm = TRUE)
+    mean2 <- mean(expr_f[cond2_cells], na.rm = TRUE)
+    log2fc <- mean1 - mean2
+
+    t_res <- tryCatch(
+      t.test(expr_f[cond1_cells], expr_f[cond2_cells]),
+      error = function(e) NULL
+    )
+    p_val <- if (!is.null(t_res)) t_res$p.value else NA_real_
+
+    plot_list[[paste(ct, gene, sep="|")]] <- data.frame(
+      CellType = ct,
+      Gene = gene,
+      pct_expressed = pct_expressed,
+      log2fc = log2fc,
+      p_val = p_val
+    )
+  }
+}
+
+plot_df <- bind_rows(plot_list)
+
+blank_df <- expand.grid(
+  CellType = celltypes,
+  Gene = paste0("blank", 1:10)
+)
+
+blank_df$pct_expressed <- NA
+blank_df$log2fc <- NA
+blank_df$star <- ""
+
+plot_df <- bind_rows(plot_df, blank_df)
+
+p_to_star <- function(p) {
+  if (is.na(p)) return("")
+ 
+  if (p < 0.001)  return("*")
+  return("")
+}
+plot_df$star <- vapply(plot_df$p_val, p_to_star, character(1))
+
+
+
+plot_df$CellType <- factor(plot_df$CellType, levels = rev(celltypes))
+plot_df$Gene <- factor(plot_df$Gene, levels = genes_of_interest)
+
+plot_df <- plot_df %>%
+  group_by(CellType) %>%
+  mutate(star_y = as.numeric(CellType) -0.12 ) %>% #+ 0.18
+  ungroup()
+
+p <- ggplot(plot_df, aes(x = Gene, y = CellType)) +
+  geom_point(aes(size = pct_expressed, color = log2fc)) +
+   geom_text(aes(y = star_y, label = star), size = 6) +
+  scale_size_area(
+    max_size = 14,
+    breaks = c(20, 40, 60),
+    limits = c(0, 100),
+    name = "% expressed"
+  ) +
+  scale_color_gradient2(low = "blue", mid = "white", high = "red",   midpoint = 0,
+  limits = c(-0.3, 0.3),
+  oob = scales::squish) +
+  theme_classic() +
+  labs(
+    title = "", #paste0(cond1, " - ", cond2, "  (color = log2FC from Violin, size = % expressed)"),
+    size = "% expressed",
+    color = "log2FC (ALS - PN)\n(nonzero cells)"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    axis.title.y = element_text(size = 10),
+    axis.title.x = element_text(size = 10),
+    axis.text.x  = element_text(size = 10, angle = 45, hjust = 1, vjust = 1),
+    axis.text.y  = element_text(size = 10),
+    legend.title = element_text(size = 6),
+    legend.text  = element_text(size = 6),
+    plot.title   = element_text(size = 12),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+  ) +
+  
+  guides(
+      size = guide_legend(override.aes = list(
+      shape = 21,        
+      color = "black",   
+      fill  = "white",   
+      stroke = 0.5      
+    ) ),
+ color = guide_colorbar(barheight = 3, barwidth = 0.6)
+)+
+  scale_x_discrete(labels = function(x) ifelse(grepl("blank", x), "", x))
+
+print(p)
+```
+
+
+

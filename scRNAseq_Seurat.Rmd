@@ -1,0 +1,146 @@
+# =============================================================================
+# scRNAseq_Seurat.R
+#
+# Description:
+# This script performs Seurat-based integration and clustering analysis of
+# publicly available single-cell RNA-seq data from ALS and control samples.
+#
+# Author:
+# Md. Shamim Hossain, Momoka Hikosaka, Suthinee Attachaipanich
+# Institute of Rheology Functions of Food, Kyoto University
+#
+# Associated publication:
+# Hikosaka et al. in review
+# "Glial metabolic states in human sporadic amyotrophic lateral sclerosis
+# uncovered by spatial single-cell proteomics."
+#
+# Public dataset:
+# Pineda et al., Cell, 2024
+#
+# Input:
+# - count matrix file: counts_fil.mtx
+# - cell metadata file: col_metadata.tsv
+# - gene metadata file: row_metadata.tsv
+#
+# Output:
+# - Integrated Seurat object
+# - Harmony-corrected low-dimensional embedding
+# - UMAP visualization
+# - Cluster assignments
+#
+# License:
+# Copyright (c) 2025  Md. Shamim Hossain, Momoka Hikosaka, Suthinee Attachaipanich
+# This code is provided for academic research purposes.
+# =============================================================================
+
+
+## Environment cleanup
+```{r}
+rm(list = ls())  
+```
+
+## Load required packages
+```{r}
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(Seurat)
+  library(patchwork)
+  library(tidyverse)
+  library(gtools)
+  library(harmony)
+  library(ggrepel)
+  library(ggplot2)
+})
+```
+
+```{r}
+ProjectName <- c(
+  "ALS101","ALS102","ALS103","ALS104","ALS106","ALS108","ALS110","ALS111",
+  "ALS112","ALS116","ALS117","ALS118","ALS120","ALS122","ALS124","ALS126",
+  "ALS127","Control301","Control302","Control303","Control304","Control306",
+  "Control307","Control309","Control311","Control317","Control318","Control319",
+  "Control322","Control323","Control324","Control325","Control328"
+)
+
+DirName <- c(
+  "101_ALS","102_ALS","103_ALS","104_ALS","106_ALS","108_ALS","110_ALS","111_ALS",
+  "112_ALS","116_ALS","117_ALS","118_ALS","120_ALS","122_ALS","124_ALS","126_ALS",
+  "127_ALS","301_Control","302_Control","303_Control","304_Control","306_Control",
+  "307_Control","309_Control","311_Control","317_Control","318_Control","319_Control",
+  "322_Control","323_Control","324_Control","325_Control","328_Control"
+)
+
+condition <- c(rep("ALS", 17), rep("Control", 16))
+
+sample_table <- data.frame(
+  project_name = ProjectName,
+  dir_name = DirName,
+  condition = condition,
+  stringsAsFactors = FALSE
+)
+
+base_dir <- "RNAseq_PublicData/Pineda_2024_Cell"
+
+RNA <- vector("list", nrow(sample_table))
+
+for (i in seq_len(nrow(sample_table))) {
+  message("Creating Seurat object: ", i, " / ", nrow(sample_table),
+          " (", sample_table$project_name[i], ")")
+
+  sample_dir <- file.path(base_dir, sample_table$dir_name[i])
+
+  metadata <- read.delim(file.path(sample_dir, "col_metadata.tsv"))
+  features <- read.delim(file.path(sample_dir, "row_metadata.tsv"))
+  Mtx1 <- Matrix::readMM(file.path(sample_dir, "counts_fil.mtx"))
+
+  features$Gene[grepl("N/A", features$Gene)] <- NA
+  features$NewGene <- NA
+
+  rownames(features) <- features$ENSEMBL
+  features[is.na(features$Gene), "NewGene"] <- features$ENSEMBL[is.na(features$Gene)]
+  features[!is.na(features$Gene), "NewGene"] <- features$Gene[!is.na(features$Gene)]
+
+  tmp1 <- features[!is.na(features$Gene), ]
+  duplicated_genes <- tmp1$Gene[duplicated(tmp1$Gene)]
+  tmp1 <- dplyr::filter(features, Gene %in% duplicated_genes)
+  features[rownames(tmp1), "NewGene"] <- features[rownames(tmp1), "ENSEMBL"]
+
+  colnames(Mtx1) <- metadata$Barcode
+  rownames(Mtx1) <- features$NewGene
+  rownames(metadata) <- metadata$Barcode
+
+  RNA[[i]] <- CreateSeuratObject(
+    counts = Mtx1,
+    project = sample_table$project_name[i],
+    min.cells = 3,
+    min.features = 200,
+    meta.data = metadata
+  )
+
+  RNA[[i]]$condition <- sample_table$condition[i]
+  RNA[[i]][["percent.mt"]] <- PercentageFeatureSet(RNA[[i]], pattern = "^MT-")
+  RNA[[i]] <- subset(RNA[[i]], subset = percent.mt <= 10)
+}
+
+Int <- merge(
+  x = RNA[[1]],
+  y = RNA[2:length(RNA)],
+  merge.data = TRUE
+)
+
+Int[["RNA"]] <- JoinLayers(Int[["RNA"]])
+
+Int <- Int %>%
+  NormalizeData() %>%
+  FindVariableFeatures() %>%
+  ScaleData() %>%
+  RunPCA(verbose = FALSE)
+
+Int <- RunHarmony(Int, group.by.vars = "orig.ident")
+Int <- RunUMAP(Int, reduction = "harmony", dims = 1:30, min.dist = 0.3, spread = 1)
+Int <- FindNeighbors(Int, reduction = "harmony", dims = 1:30) %>%
+  FindClusters(resolution = 0.3)
+
+# saveRDS(Int, file.path(base_dir, "Pineda.Int.rds"))
+
+```
