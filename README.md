@@ -1,4 +1,5 @@
 4. Public Data Analysis (R)
+
 We provide R scripts used to analyze publicly available single-cell RNA-seq data from ALS and control samples (GEO: GSE174332; Pineda et al., Cell 2024) (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE174332).
 
 GSM5292194  201019_ALS_101_snRNA-B1
