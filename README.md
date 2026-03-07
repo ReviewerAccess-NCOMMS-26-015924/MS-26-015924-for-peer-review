@@ -7,8 +7,11 @@ ________________________________________
 Repository Contents
 The repository includes the following analysis modules:
 1.	IMC Preprocessing (MATLAB)
+
 o	IMC signal filtering
+
 o	Nuclear detection correction
+
 o	Field-of-view (FOV) correction
 2.	IMC Proteomics Clustering (R)
 3.	ALS Distance Analysis (MATLAB)
