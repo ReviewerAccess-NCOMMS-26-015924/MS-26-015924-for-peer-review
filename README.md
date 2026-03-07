@@ -34,17 +34,23 @@ We also implemented a field-of-view (FOV) correction code that refines the regio
 ________________________________________
 2. IMC Proteomics Clustering (R)
 We provide the code used for clustering IMC-derived single-cell proteomic data.
+
 IMC_Seurat_clustering.rmd
 This script performs single-cell protein clustering of Imaging Mass Cytometry (IMC) data using the Seurat framework.
 The workflow includes data loading, preprocessing, integration, dimensionality reduction, clustering, and visualization of cell populations.
+
 IMC_subclustering.rmd
 This script performs subclustering analysis of major cell populations identified from Imaging Mass Cytometry (IMC) single-cell protein data.
+
 IMC_DEPs_heatmap.rmd
 This script computes differential marker expression between ALS and control groups within each major cell type from the integrated IMC Seurat object and visualizes the results as a heatmap.
+
 IMC_marker_expression_profiles.rmd
 This script generates dot plots showing marker expression across subcelltypes for selected major cell classes from the integrated IMC Seurat object.
+
 IMC_cell_transition.rmd
 This script performs cell-state transition analysis of astrocyte subcelltypes identified from integrated IMC single-cell protein data, using Monocle 3 (https://cole-trapnell-lab.github.io/monocle3/).
+
  
 The parameters in these scripts are currently optimized for the Precentral gyrus dataset.
 For parameter settings used for other brain regions, please refer to IMC_analysis_parameters.txt.
