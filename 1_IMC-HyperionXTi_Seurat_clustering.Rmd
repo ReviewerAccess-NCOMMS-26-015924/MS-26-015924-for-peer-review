@@ -1,0 +1,392 @@
+# =============================================================================
+# 1_IMC-HyperionXTi_Seurat_clustering.Rmd
+#
+# Description:
+# This script performs single-cell protein clustering of Hyperion XTi Imaging
+# Mass Cytometry data using Seurat and Harmony.
+#
+# Author:
+# Momoka Hikosaka
+# Kyoto University
+#
+# Associated publication:
+# Hikosaka et al. in review
+# "Glial metabolic states in human sporadic amyotrophic lateral sclerosis
+# uncovered by spatial single-cell proteomics."
+#
+# Input:
+# - IMC-Hyperion_metadata.csv
+# - Preprocessed IMC single-cell expression matrices (*.csv)
+#
+# Output:
+# - Integrated Seurat object
+# - PCA, Harmony, and UMAP embeddings
+# - Cluster annotations
+# - Visualization figures
+#
+# Notes:
+# Analysis parameters are currently configured for the Precentral gyrus dataset.
+#
+# License:
+# Copyright (c) 2025 Momoka Hikosaka
+# This code is provided for academic research purposes.
+# =============================================================================
+
+## Environment cleanup
+```{r}
+rm(list = ls())  
+```
+
+# Load required packages
+```{r}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(dplyr)
+  library(harmony)
+  library(tidyverse)
+  library(ggplot2)
+  library(viridis)
+  library(patchwork)
+  library(harmony)
+  library(cowplot)
+  library(tools)
+  library(forcats) 
+})
+```
+
+## File paths and analysis settings
+```{r}
+metadata_file <- "IMC_XTi_SOc_metadata.csv"
+data_dir <- "data"
+output_dir <- "output"
+analysis_region <- "PrecentralGyrus"
+
+if (!file.exists(metadata_file)) {
+  stop("Metadata file not found: ", metadata_file)
+}
+
+if (!dir.exists(data_dir)) {
+  stop("Expression-data directory not found: ", data_dir)
+}
+
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+```
+
+## Load sample metadata
+```{r}
+metadata <- read.csv("IMC-HyperionXTi_metadata.csv",
+  stringsAsFactors = FALSE)
+
+Data_selected <- metadata[metadata$Region == analysis_region & metadata$Analysis == 1, ]
+
+Data_table <- data.frame(
+  Data_path   = Data_selected$csv_R_analysis,
+  Name        = Data_selected$Name,
+  Sample_name = Data_selected$Sample_name,
+  Sex         = Data_selected$Sex,
+  Age         = Data_selected$Age,
+  Major_group = Data_selected$Group,
+  stringsAsFactors = FALSE
+)
+
+files <- lapply(seq_len(nrow(Data_table)), function(i) {
+  list(
+    path        = Data_table$Data_path[i],
+    group       = Data_table$Name[i],
+    sample_name = Data_table$Sample_name[i],
+    sex         = Data_table$Sex[i],
+    age         = Data_table$Age[i],
+    major_group = Data_table$Major_group[i]
+  )
+})
+```
+
+## Import expression matrices and construct Seurat objects
+```{r}
+seurat_list <- list()
+
+for (i in seq_along(files)) {
+  temp <- read.csv(files[[i]]$path, header = TRUE, stringsAsFactors = FALSE)
+  if (!"Sel01" %in% colnames(temp)) {
+  temp$Sel01 <- 1
+  }
+  
+  seurat_data <- temp[temp$Sel01 == 1, , drop = FALSE]
+  rownames(seurat_data) <- make.unique(as.character(seurat_data$cell_ids))
+
+  start <- which(colnames(seurat_data) == "Cell_89Y_Collagen_I")
+  end   <- which(colnames(seurat_data) == "Cell_176Yb_NRF2")
+  cat("Number of markers == 37:", end - start + 1 == 37, "\n")
+  
+  seurat_data <- seurat_data[, start:end]
+  
+  names(seurat_data)
+ 
+  expression_matrix <- t(as.matrix(seurat_data))
+  
+  seurat_object <- CreateSeuratObject(counts = expression_matrix, 
+                                      assay = "Protein")
+  
+  DefaultAssay(seurat_object) <- "Protein"
+  
+  seurat_object$group <- files[[i]]$group
+  seurat_object$sample_name <- files[[i]]$sample_name
+  seurat_object$sex <- files[[i]]$sex
+  seurat_object$age <- files[[i]]$age
+  seurat_object$major_group <- files[[i]]$major_group
+  seurat_object <- NormalizeData(
+    seurat_object,
+    assay = "Protein",
+    normalization.method = "CLR",
+    margin = 2
+    )
+  seurat_object <- ScaleData(seurat_object, assay = "Protein")
+  seurat_list[[i]] <- seurat_object
+}
+
+
+by_sample <- split(seurat_list, sapply(seurat_list, function(x) unique(x$sample_name)))
+
+for (sample in names(by_sample)) {
+  lst <- by_sample[[sample]]
+  for (j in seq_along(lst)) {
+    lst[[j]]$roi <- paste0(sample, "_ROI", j)
+  }
+  by_sample[[sample]] <- lst
+}
+
+seurat_per_sample <- lapply(by_sample, function(lst) {
+  merged <- Reduce(function(x, y) merge(x, y), lst)
+  if ("layers" %in% slotNames(merged[["Protein"]])) {
+    merged[["Protein"]] <- JoinLayers(merged[["Protein"]])
+  }
+  merged
+})
+
+combined_seurat <- Reduce(function(x, y) merge(x, y), seurat_per_sample)
+
+combined_seurat[["Protein"]] <- JoinLayers(combined_seurat[["Protein"]])
+
+combined_seurat <- FindVariableFeatures(combined_seurat, assay = "Protein")
+
+features <- c(
+  # Astrocytes
+  "Cell-143Nd-GFAP",
+  "Cell-146Nd-S100beta",
+  "Cell-147Sm-AQP4",
+  # Neurons
+  "Cell-148Nd-MAP2",
+  # Microglia and myeloid cells
+  "Cell-142Nd-Iba1",
+  "Cell-144Nd-CD11b",
+  "Cell-154Sm-CD11c",
+  # Oligodendrocytes
+  "Cell-168Er-Olig2",
+  # Vascular cells
+  "Cell-151Eu-CD31",
+  "Cell-167Er-CD34",
+  # Lymphocytes
+  "Cell-115In-CD20",
+  "Cell-156Gd-CD4",
+  "Cell-162Dy-CD8a",
+  "Cell-155Gd-FoxP3",
+  # Neutrophils
+  "Cell-160Gd-CD66b"
+)
+
+VariableFeatures(combined_seurat) <- features
+
+combined_seurat <- RunPCA(
+  combined_seurat,
+  assay = "Protein",
+  features = VariableFeatures(combined_seurat)
+)
+```
+
+## Batch Effect Correction
+```{r}
+colnames(combined_seurat@meta.data)
+
+table(combined_seurat$roi)
+
+combined_seurat <- RunHarmony(
+  object = combined_seurat,
+  group.by.vars = c("roi")
+)
+```
+
+## UMAP clustring
+Note: UMAP embeddings may show slight differences in layout across runs owing to stochastic optimization. For exact reproduction of previously generated embeddings, the saved RDS object should be loaded instead of rerunning the workflow.
+```{r}
+ncol(Embeddings(combined_seurat, "harmony"))
+
+set.seed(127)
+
+combined_seurat <- FindNeighbors(combined_seurat,
+                                 reduction = "harmony",
+                                 dims      = 1:13, 
+                                 k.param   = 50)  
+
+combined_seurat <- FindClusters(combined_seurat, resolution = 1.8)
+
+combined_seurat <- RunUMAP(combined_seurat,
+                           reduction = "harmony",
+                           dims      = 1:13,
+                           min.dist  = 0.02,
+                           spread    = 2,
+                           n.neighbors = 50,
+                           seed.use = 127) 
+
+DimPlot(combined_seurat, label = T)
+DimPlot(combined_seurat, label = T, group.by = "run_id")
+DimPlot(combined_seurat, label = T, group.by = "group")
+DimPlot(combined_seurat, label = T, group.by = "Sample_name")
+DimPlot(combined_seurat, label = T)
+DimPlot(combined_seurat, label = T, split.by = "group")
+DimPlot(combined_seurat, label = T, split.by = "Sample_name")
+```
+
+## Featureplot to check marker expression patterns
+```{r}
+output_folder_temp <- paste0(output_folder, "featureplot/")
+dir.create(output_folder_temp, showWarnings = FALSE, recursive = TRUE)
+
+for(feature in features){
+  p <- FeaturePlot(
+    combined_seurat,
+    features = feature,
+    reduction = "umap",
+    slot = "scale.data", 
+    order = TRUE,
+    pt.size = 0.4
+  )
+
+  ggsave(
+    filename = file.path(output_folder_temp, paste0(feature, ".png")),
+    plot = p,
+    width = 5,
+    height = 5,
+    dpi = 300
+  )
+}
+```
+
+## Major cell-type annotation
+```{r}
+Cell_type <- RenameIdents(combined_seurat,
+  "0"  = "Oligodendrocyte",
+  "1"  = "Vascular Cell",
+  "2"  = "Astrocyte", 
+  "3"  = "Astrocyte",
+  "4"  = "Microglia",
+  "5"  = "Neuron",
+  "6"  = "Astrocyte",
+  "7"  = "Oligodendrocyte",
+  "8"  = "Neuron",
+  "9"  = "Neuron",
+  "10" = "Neuron",
+  "11" = "Astrocyte",
+  "12" = "Oligodendrocyte",
+  "13" = "Neuron",
+  "14" = "Neuron",
+  "15" = "Vascular Cell",
+  "16" = "Neuron",
+  "17" = "Neuron",
+  "18" = "Neuron",
+  "19" = "Astrocyte",
+  "20" = "Microglia",
+  "21" = "B Cell",
+  "22" = "Neutrophil",
+  "23" = "Neuron",
+  "24" = "Oligodendrocyte",
+  "25" = "T Cell",
+  "26" = "T Cell"
+  )
+ 
+
+combined_seurat$Celltype = Idents(Cell_type)
+
+combined_seurat$Celltype <- factor(
+  combined_seurat$Celltype,
+  levels = c(
+    "Astrocyte",
+    "Neuron",
+    "Oligodendrocyte",
+    "Vascular Cell",
+    "Microglia",
+    "B Cell",
+    "T Cell",
+    "Neutrophil",
+    "Others"
+  )
+)
+
+plot_order <- c(
+  "Others",
+  "Neutrophil",
+  "T Cell",
+  "B Cell",
+  "Microglia",
+  "Vascular Cell",
+  "Oligodendrocyte",
+  "Astrocyte",
+  "Neuron"
+)
+
+combined_seurat_plot <- combined_seurat[
+  ,
+  order(match(combined_seurat$Celltype, plot_order))
+]
+
+p <- DimPlot(
+  combined_seurat,
+  group.by = "Celltype",
+  pt.size = 0.05,
+  label = F
+) +
+  ggtitle("Major Cell Type") +
+scale_color_manual(values = c(
+  "Astrocyte"       = "#F8766D",  # Coral
+  "Neuron"          = "#00B0F6",  # Blue
+  "Oligodendrocyte" = "#9590FF",  # Lavender
+  "Vascular Cell"   = "#E78AC3",  # Pink
+  "Microglia"       = "#E69F00",  # Orange
+  "B Cell"          = "#F0E442",  # Yellow
+  "T Cell"          = "#C9D93B",  # Yellow-green
+  "Neutrophil"      = "#8BCF4A",  # Light yellow-green
+  "Others"          = "#BEBEBE"   # Gray
+))+
+  theme_classic() +
+  theme(
+    axis.text = element_text(size = 20, color = "black"),
+    axis.title = element_text(size = 20, color = "black"),
+    legend.position = "right",
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(5, "pt")
+  )
+
+print(p)
+
+
+ggsave(
+  filename = file.path(output_folder, "UMAP_CellType.png"),
+  plot = p,
+  width = 8,
+  height = 7,
+  dpi = 600,
+  bg = "white"
+)
+```
+
+## Save integrated Seurat object
+```{r}
+#saveRDS(
+#  combined_seurat,
+#  file = file.path(output_folder, "combined_seurat_PrecentralGyrus.rds")
+#)
+```
+
+# Subsequent analyses and visualization were performed using the same workflow
+# as for the Hyperion dataset.

@@ -1,0 +1,338 @@
+# =============================================================================
+# 2_IMC-Hyperion_Heatmap.Rmd
+#
+# Description:
+# This script calculates mean protein expression for each major cell type,
+# Z-score-scales the mean expression across cell types for each marker,
+# and generates a heatmap.
+#
+# Author:
+# Momoka Hikosaka
+# Kyoto University
+#
+# Associated publication:
+# Hikosaka et al. in review
+# "Glial metabolic states in human sporadic amyotrophic lateral sclerosis
+# uncovered by spatial single-cell proteomics."
+#
+# Input:
+# - Integrated Seurat object 
+#
+# Output:
+# - Heatmap of Z-scored mean protein expression
+#
+# License:
+# Copyright (c) 2025 Momoka Hikosaka
+# This code is provided for academic research purposes.
+# =============================================================================
+
+## Environment cleanup
+```{r}
+rm(list = ls())  
+```
+
+## Load required packages
+```{r}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+})
+```
+
+## Output directory
+```{r}
+output_folder <- "output"
+if (!dir.exists(output_folder)) {
+  dir.create(output_folder)
+}
+```
+
+## Load the integrated Seurat object
+```{r}
+combined_seurat<-readRDS("combined_seurat_PrecentralGyrus.rds")
+```
+
+## Define marker panels
+```{r}
+markers_astrocyte <- c(
+  "Cell-141Pr-AQP4",
+  "Cell-158Gd-GFAP"
+)
+
+markers_immune <- c(
+  "Cell-161Dy-CX3CR1",
+  "Cell-164Dy-TMEM119",
+  "Cell-160Gd-IBA1",
+  "Cell-163Dy-CD4",
+  "Cell-155Gd-FoxP3",
+  "Cell-167Er-CD8"
+)
+
+markers_neuron <- c(
+  "Cell-151Eu-MAP2",
+  "Cell-149Sm-C9orf72", # NeuN
+  "Cell-169Tm-ChAT",
+  "Cell-166Er-GAD67"
+)
+
+markers_others <- c(
+  "Cell-175Lu-TDP43",
+  "Cell-154Sm-pTDP43",
+  "Cell-168Er-FUS",
+  "Cell-152Sm-ATXN2",
+  "Cell-145Nd-UBQLN2",
+  "Cell-170Er-APOE",
+  "Cell-176Yb-TBK1",
+  "Cell-162Dy-pTBK1",
+  "Cell-147Sm-Glutaminase",
+  "Cell-143Nd-SQSTM1",
+  "Cell-156Gd-CH24H",
+  "Cell-153Eu-ORF1",
+  "Cell-159Tb-IL6ST",
+  "Cell-165Ho-PD1",
+  "Cell-150Nd-PDL1",
+  "Cell-172Yb-PDL2",
+  "Cell-171Yb-TREM2",
+  "Cell-174Yb-MHCclassII"
+)
+
+markers <- c(
+  markers_astrocyte,
+  markers_immune,
+  markers_neuron,
+  markers_others
+)
+
+marker_labels <- c(
+  "Cell-141Pr-AQP4"          = "AQP4",
+  "Cell-143Nd-SQSTM1"        = "SQSTM1",
+  "Cell-145Nd-UBQLN2"        = "UBQLN2",
+  "Cell-147Sm-Glutaminase"   = "GLS",
+  "Cell-149Sm-C9orf72"       = "NeuN",
+  "Cell-150Nd-PDL1"          = "PDL1",
+  "Cell-151Eu-MAP2"          = "MAP2",
+  "Cell-152Sm-ATXN2"         = "ATXN2",
+  "Cell-153Eu-ORF1"          = "ORF1",
+  "Cell-154Sm-pTDP43"        = "pTDP43",
+  "Cell-155Gd-FoxP3"         = "FOXP3",
+  "Cell-156Gd-CH24H"         = "CH24H",
+  "Cell-158Gd-GFAP"          = "GFAP",
+  "Cell-159Tb-IL6ST"         = "IL6ST",
+  "Cell-160Gd-IBA1"          = "IBA1",
+  "Cell-161Dy-CX3CR1"        = "CX3CR1",
+  "Cell-162Dy-pTBK1"         = "pTBK1",
+  "Cell-163Dy-CD4"           = "CD4",
+  "Cell-164Dy-TMEM119"       = "TMEM119",
+  "Cell-165Ho-PD1"           = "PD1",
+  "Cell-166Er-GAD67"         = "GAD67",
+  "Cell-167Er-CD8"           = "CD8",
+  "Cell-168Er-FUS"           = "FUS",
+  "Cell-169Tm-ChAT"          = "ChAT",
+  "Cell-170Er-APOE"          = "APOE",
+  "Cell-171Yb-TREM2"         = "TREM2",
+  "Cell-172Yb-PDL2"          = "PDL2",
+  "Cell-174Yb-MHCclassII"    = "MHCII",
+  "Cell-175Lu-TDP43"         = "TDP43",
+  "Cell-176Yb-TBK1"          = "TBK1"
+)
+```
+
+## Define the cell-type order
+```{r}
+celltype_order <- c(
+  "Astrocyte",
+  "Immune",
+  "Excitatory",
+  "Inhibitory",
+  "Others"
+)
+
+combined_seurat$Celltype <- factor(
+  combined_seurat$Celltype,
+  levels = celltype_order
+)
+```
+
+
+## Calculate mean and Z-scored expression
+```{r}
+make_heatmap_data <- function(
+    seu,
+    group_var,
+    markers,
+    marker_labels,
+    clip_range = c(-2.5, 2.5)
+) {
+
+  # Reverse the marker order for bottom-to-top heatmap display
+  markers_rev <- rev(markers)
+
+  # Extract normalized protein-expression values
+  expression_data <- FetchData(
+    seu,
+    vars = markers_rev,
+    layer = "data"
+  )
+
+  expression_data$Group <- seu[[group_var, drop = TRUE]]
+
+  # Calculate mean expression within each cell type
+  mean_data <- expression_data %>%
+    group_by(Group) %>%
+    summarise(
+      across(
+        all_of(markers_rev),
+        ~ mean(.x, na.rm = TRUE)
+      ),
+      .groups = "drop"
+    )
+
+  # Convert to long format and Z-score each marker across cell types
+  heatmap_data <- mean_data %>%
+    pivot_longer(
+      cols = all_of(markers_rev),
+      names_to = "marker",
+      values_to = "mean_expression"
+    ) %>%
+    group_by(marker) %>%
+    mutate(
+      z_score = as.numeric(scale(mean_expression)),
+      z_score = scales::squish(
+        z_score,
+        range = clip_range
+      )
+    ) %>%
+    ungroup()
+
+  # Set marker labels and display order
+  heatmap_data$marker_label <- factor(
+    heatmap_data$marker,
+    levels = markers_rev,
+    labels = marker_labels[markers_rev]
+  )
+
+  heatmap_data
+}
+```
+
+
+## Heatmap function
+```{r}
+plot_heatmap <- function(
+    heatmap_data,
+    group_levels,
+    clip_range = c(-2.5, 2.5)
+) {
+
+  heatmap_data$Group <- factor(
+    heatmap_data$Group,
+    levels = group_levels
+  )
+
+  ggplot(
+    heatmap_data,
+    aes(
+      x = Group,
+      y = marker_label,
+      fill = z_score
+    )
+  ) +
+    geom_tile(
+      colour = "white",
+      linewidth = 0.4
+    ) +
+    scale_fill_gradientn(
+      colours = c(
+        "lightyellow3",
+        "lightyellow",
+        "orange",
+        "red"
+      ),
+      values = scales::rescale(
+        c(clip_range[1], 0, 1, clip_range[2])
+      ),
+      limits = clip_range,
+      oob = scales::squish,
+      name = "Z-scored\nexpression",
+      guide = guide_colorbar(
+        title.theme = element_text(
+          color = "black",
+          size = 16
+        ),
+        label.theme = element_text(
+          color = "black",
+          size = 12
+        )
+      )
+    ) +
+    scale_x_discrete(
+      position = "top",
+      drop = FALSE
+    ) +
+    theme_classic(
+      base_family = "Arial"
+    ) +
+    theme(
+      axis.text.x = element_text(
+        angle = 80,
+        size = 18,
+        color = "black",
+        vjust = 1,
+        hjust = 0
+      ),
+      axis.text.y = element_text(
+        size = 18,
+        color = "black"
+      ),
+      axis.title = element_blank(),
+      legend.position = "bottom",
+      axis.line = element_line(
+        color = "black",
+        linewidth = 0.5
+      ),
+      axis.ticks = element_line(
+        color = "black",
+        linewidth = 0.5
+      ),
+      axis.ticks.length = grid::unit(
+        5,
+        "pt"
+      )
+    )
+}
+```
+
+
+## Generate the heatmap data and plot
+```{r}
+heatmap_data <- make_heatmap_data(
+  seu = combined_seurat,
+  group_var = "Celltype",
+  markers = markers,
+  marker_labels = marker_labels
+)
+
+p <- plot_heatmap(
+  heatmap_data = heatmap_data,
+  group_levels = celltype_order
+)
+
+print(p)
+
+ggsave(
+  filename = file.path(
+    output_folder,
+    "Heatmap_Celltype.png"
+  ),
+  plot = p,
+  width = 3.5,
+  height = 15,
+  units = "in",
+  dpi = 300,
+  limitsize = FALSE,
+  bg = "white"
+)
+```
+

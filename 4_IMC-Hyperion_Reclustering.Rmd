@@ -1,0 +1,1026 @@
+# =============================================================================
+# 4_IMC-Hyperion_Reclustering.Rmd
+#
+# Description:
+# This script reclusters astrocytes, excitatory neurons, and immune cells from
+# the precentral gyrus IMC dataset and visualizes the resulting subcell types.
+# It also generates a marker-expression dot plot and heatmap.
+#
+# Author:
+# Momoka Hikosaka
+# Kyoto University
+#
+# Associated publication:
+# Hikosaka et al. in review
+# "Glial metabolic states in human sporadic amyotrophic lateral sclerosis
+# uncovered by spatial single-cell proteomics."
+#
+# Input:
+# - Integrated Seurat object 
+#
+# Output:
+# - Reclustering UMAPs for astrocytes, excitatory neurons, and immune cells
+# - Combined marker-expression dot plot
+#
+# License:
+# Copyright (c) 2025 Momoka Hikosaka
+# This code is provided for academic research purposes.
+# =============================================================================
+
+## Environment cleanup
+```{r}
+rm(list = ls())  
+```
+
+# Load required packages
+```{r}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(patchwork)
+})
+```
+
+## Output directory
+```{r}
+output_folder <- "output"
+if (!dir.exists(output_folder)) {
+  dir.create(output_folder)
+}
+```
+
+## Load the integrated Seurat object
+```{r}
+combined_seurat<-readRDS("combined_seurat_PrecentralGyrus.rds")
+```
+
+## Define marker panels
+```{r}
+markers_astrocyte <- c(
+  "Cell-141Pr-AQP4",
+  "Cell-158Gd-GFAP"
+)
+
+markers_immune <- c(
+  "Cell-161Dy-CX3CR1",
+  "Cell-164Dy-TMEM119",
+  "Cell-160Gd-IBA1",
+  "Cell-163Dy-CD4",
+  "Cell-155Gd-FoxP3",
+  "Cell-167Er-CD8"
+)
+
+markers_neuron <- c(
+  "Cell-151Eu-MAP2",
+  "Cell-149Sm-C9orf72", # NeuN
+  "Cell-169Tm-ChAT",
+  "Cell-166Er-GAD67"
+)
+
+markers_others <- c(
+  "Cell-175Lu-TDP43",
+  "Cell-154Sm-pTDP43",
+  "Cell-168Er-FUS",
+  "Cell-152Sm-ATXN2",
+  "Cell-145Nd-UBQLN2",
+  "Cell-170Er-APOE",
+  "Cell-176Yb-TBK1",
+  "Cell-162Dy-pTBK1",
+  "Cell-147Sm-Glutaminase",
+  "Cell-143Nd-SQSTM1",
+  "Cell-156Gd-CH24H",
+  "Cell-153Eu-ORF1",
+  "Cell-159Tb-IL6ST",
+  "Cell-165Ho-PD1",
+  "Cell-150Nd-PDL1",
+  "Cell-172Yb-PDL2",
+  "Cell-171Yb-TREM2",
+  "Cell-174Yb-MHCclassII"
+)
+
+markers <- c(
+  markers_astrocyte,
+  markers_immune,
+  markers_neuron,
+  markers_others
+)
+
+marker_labels <- c(
+  "Cell-141Pr-AQP4"          = "AQP4",
+  "Cell-143Nd-SQSTM1"        = "SQSTM1",
+  "Cell-145Nd-UBQLN2"        = "UBQLN2",
+  "Cell-147Sm-Glutaminase"   = "GLS",
+  "Cell-149Sm-C9orf72"       = "NeuN",
+  "Cell-150Nd-PDL1"          = "PDL1",
+  "Cell-151Eu-MAP2"          = "MAP2",
+  "Cell-152Sm-ATXN2"         = "ATXN2",
+  "Cell-153Eu-ORF1"          = "ORF1",
+  "Cell-154Sm-pTDP43"        = "pTDP43",
+  "Cell-155Gd-FoxP3"         = "FOXP3",
+  "Cell-156Gd-CH24H"         = "CH24H",
+  "Cell-158Gd-GFAP"          = "GFAP",
+  "Cell-159Tb-IL6ST"         = "IL6ST",
+  "Cell-160Gd-IBA1"          = "IBA1",
+  "Cell-161Dy-CX3CR1"        = "CX3CR1",
+  "Cell-162Dy-pTBK1"         = "pTBK1",
+  "Cell-163Dy-CD4"           = "CD4",
+  "Cell-164Dy-TMEM119"       = "TMEM119",
+  "Cell-165Ho-PD1"           = "PD1",
+  "Cell-166Er-GAD67"         = "GAD67",
+  "Cell-167Er-CD8"           = "CD8",
+  "Cell-168Er-FUS"           = "FUS",
+  "Cell-169Tm-ChAT"          = "ChAT",
+  "Cell-170Er-APOE"          = "APOE",
+  "Cell-171Yb-TREM2"         = "TREM2",
+  "Cell-172Yb-PDL2"          = "PDL2",
+  "Cell-174Yb-MHCclassII"    = "MHCII",
+  "Cell-175Lu-TDP43"         = "TDP43",
+  "Cell-176Yb-TBK1"          = "TBK1"
+)
+```
+
+## Reclustering function
+```{r}
+recluster_celltype <- function(
+    seu,
+    celltype,
+    dims,
+    k_param,
+    resolution,
+    n_neighbors,
+    min_dist,
+    spread,
+    seed,
+    umap_seed = seed
+) {
+  object <- subset(
+    seu,
+    subset = Celltype == celltype
+  )
+
+  DefaultAssay(object) <- "Protein"
+  VariableFeatures(object) <- rownames(object)
+
+  object <- RunPCA(
+    object,
+    assay = "Protein",
+    features = VariableFeatures(object),
+    verbose = FALSE
+  )
+
+  set.seed(seed)
+
+  object <- FindNeighbors(
+    object,
+    reduction = "pca",
+    dims = dims,
+    k.param = k_param,
+    verbose = FALSE
+  )
+
+  object <- FindClusters(
+    object,
+    resolution = resolution,
+    verbose = FALSE
+  )
+
+  object <- RunUMAP(
+    object,
+    reduction = "pca",
+    dims = dims,
+    n.neighbors = n_neighbors,
+    min.dist = min_dist,
+    spread = spread,
+    seed.use = umap_seed,
+    verbose = FALSE
+  )
+
+  object
+}
+```
+
+## Recluster astrocytes
+```{r}
+combined_seurat_Astro <- recluster_celltype(
+  seu = combined_seurat,
+  celltype = "Astrocyte",
+  prefix = "Astro_",
+  dims = 1:6,
+  k_param = 30,
+  resolution = 0.9,
+  n_neighbors = 30,
+  min_dist = 0.2,
+  spread = 2,
+  seed = 11,
+  umap_seed = 11
+)
+
+combined_seurat_Astro$Subcelltype <- factor(
+  paste0(
+    "Astro_",
+    as.integer(as.character(Idents(combined_seurat_Astro))) + 1
+  ),
+  levels = paste0("Astro_", 1:5)
+)
+```
+
+## Recluster excitatory neurons
+```{r}
+combined_seurat_ExcNeuron <- recluster_celltype(
+  seu = combined_seurat,
+  celltype = "Excitatory",
+  prefix = "Excit_",
+  dims = 1:6,
+  k_param = 50,
+  resolution = 0.6,
+  n_neighbors = 50,
+  min_dist = 0.1,
+  spread = 2,
+  seed = 11,
+  umap_seed = 11
+)
+
+combined_seurat_ExcNeuron$Subcelltype <- factor(
+  paste0(
+    "Excit_",
+    as.integer(as.character(Idents(combined_seurat_ExcNeuron))) + 1
+  ),
+  levels = paste0("Excit_", 1:4)
+)
+```
+
+## Recluster immune cells
+```{r}
+combined_seurat_Immune <- recluster_celltype(
+  seu = combined_seurat,
+  celltype = "Immune",
+  prefix = "Immune_",
+  dims = 1:6,
+  k_param = 20,
+  resolution = 0.3,
+  n_neighbors = 50,
+  min_dist = 0.1,
+  spread = 2,
+  seed = 20,
+  umap_seed = 15
+)
+
+combined_seurat_Immune$Subcelltype <- factor(
+  paste0(
+    "Immune_",
+    as.integer(as.character(Idents(combined_seurat_Immune))) + 1
+  ),
+  levels = paste0("Immune_", 1:3)
+)
+```
+
+Note: UMAP embeddings may show slight differences in layout across runs owing to stochastic optimization. For exact reproduction of previously generated embeddings, the saved RDS object should be loaded instead of rerunning the workflow.
+## Reload the saved object for exact figure reproduction
+```{r}
+
+combined_seurat_Astro <- readRDS(
+  "combined_seurat_PrecentralGyrus_Astrocyte.rds"
+)
+
+combined_seurat_ExcNeuron <- readRDS(
+  "combined_seurat_PrecentralGyrus_ExcNeuron.rds"
+)
+
+combined_seurat_Immune <- readRDS(
+  "combined_seurat_PrecentralGyrus_Immune.rds"
+)
+
+combined_seurat_Astro$Subcelltype <- factor(
+  combined_seurat_Astro$Subcelltype,
+  levels = paste0("Astro_", 1:5)
+)
+
+combined_seurat_ExcNeuron$Subcelltype <- factor(
+  combined_seurat_ExcNeuron$Subcelltype,
+  levels = paste0("Excit_", 1:4)
+)
+
+combined_seurat_Immune$Subcelltype <- factor(
+  combined_seurat_Immune$Subcelltype,
+  levels = paste0("Immune_", 1:3)
+)
+```
+
+## UMAP plotting function
+```{r}
+make_subtype_umap <- function(
+    object,
+    colors,
+    split_by_group = FALSE,
+    coordinate_limits = NULL
+) {
+  plot <- DimPlot(
+    object,
+    reduction = "umap",
+    group.by = "Subcelltype",
+    split.by = if (split_by_group) "major_group" else NULL,
+    label = TRUE,
+    label.size = 6,
+    repel = TRUE,
+    pt.size = 0.5
+  ) +
+    scale_color_manual(
+      values = colors,
+      drop = FALSE
+    ) +
+    guides(
+      colour = guide_legend(
+        override.aes = list(size = 5)
+      )
+    ) +
+    theme_classic(base_family = "Arial") +
+    theme(
+      axis.text = element_text(size = 16, color = "black"),
+      axis.title = element_text(size = 16, color = "black"),
+      legend.position = "right",
+      legend.text = element_text(size = 12, color = "black"),
+      legend.title = element_blank(),
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      axis.ticks.length = grid::unit(5, "pt")
+    )
+
+  if (!is.null(coordinate_limits)) {
+    plot <- plot + coord_cartesian(
+      xlim = coordinate_limits$x,
+      ylim = coordinate_limits$y
+    )
+  }
+
+  plot
+}
+```
+
+## Generate and save UMAPs
+```{r}
+subtype_colors <- list(
+  Astrocyte = c(
+    "Astro_1" = "#FF5A5A",
+    "Astro_2" = "#FF7794",
+    "Astro_3" = "#FF8FC2",
+    "Astro_4" = "#FFB0D8",
+    "Astro_5" = "#FFD4C2"
+  ),
+  Excitatory = c(
+    "Excit_1" = "#1F78FF",
+    "Excit_2" = "#5CB6FF",
+    "Excit_3" = "#9BD3FF",
+    "Excit_4" = "#CFEAFF"
+  ),
+  Immune = c(
+    "Immune_1" = "#FF7A3D",
+    "Immune_2" = "#FFAA33",
+    "Immune_3" = "#FFE066"
+  )
+)
+
+reclustered_objects <- list(
+  Astrocyte = combined_seurat_Astro,
+  Excitatory = combined_seurat_ExcNeuron,
+  Immune = combined_seurat_Immune
+)
+
+coordinate_limits <- list(
+  Astrocyte = NULL,
+  Excitatory = NULL,
+  Immune = list(
+    x = c(-10, 15),
+    y = c(-8, 8)
+  )
+)
+
+file_labels <- c(
+  Astrocyte = "Astrocyte",
+  Excitatory = "ExcNeuron",
+  Immune = "Immune"
+)
+
+for (celltype in names(reclustered_objects)) {
+  object <- reclustered_objects[[celltype]]
+
+  umap_plot <- make_subtype_umap(
+    object = object,
+    colors = subtype_colors[[celltype]],
+    coordinate_limits = coordinate_limits[[celltype]]
+  )
+
+  split_plot <- make_subtype_umap(
+    object = object,
+    colors = subtype_colors[[celltype]],
+    split_by_group = TRUE,
+    coordinate_limits = coordinate_limits[[celltype]]
+  )
+
+  print(umap_plot)
+  print(split_plot)
+
+  ggsave(
+    filename = file.path(
+      output_folder,
+      paste0("UMAP_", file_labels[celltype], ".png")
+    ),
+    plot = umap_plot,
+    width = 5,
+    height = 4,
+    units = "in",
+    dpi = 300,
+    bg = "white"
+  )
+}
+```
+
+## Marker-expression dot plot function
+```{r}
+make_dotplot <- function(
+    seurat_object,
+    selected_markers,
+    marker_labels,
+    high_color,
+    show_y_axis = TRUE,
+    show_legend = TRUE,
+    panel_title = NULL
+) {
+  expression_data <- FetchData(
+    seurat_object,
+    vars = c(
+      selected_markers,
+      "Subcelltype",
+      "major_group"
+    ),
+    layer = "counts"
+  )
+
+  subtype_levels <- levels(
+    droplevels(expression_data$Subcelltype)
+  )
+
+  expression_long <- expression_data %>%
+    pivot_longer(
+      cols = all_of(selected_markers),
+      names_to = "marker",
+      values_to = "expression"
+    )
+
+  overall_marker_means <- expression_long %>%
+    group_by(marker) %>%
+    summarise(
+      overall_marker_mean = mean(expression, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  dotplot_data <- expression_long %>%
+    group_by(marker, Subcelltype, major_group) %>%
+    summarise(
+      mean_expression = mean(expression, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    left_join(
+      overall_marker_means,
+      by = "marker"
+    ) %>%
+    group_by(marker) %>%
+    mutate(
+      relative_expression = ifelse(
+        overall_marker_mean > 0,
+        mean_expression / overall_marker_mean * 100,
+        0
+      ),
+      scaled_expression = if (sd(mean_expression, na.rm = TRUE) > 0) {
+        as.numeric(scale(mean_expression))
+      } else {
+        0
+      }
+    ) %>%
+    ungroup() %>%
+    mutate(
+      marker = factor(
+        marker,
+        levels = rev(selected_markers)
+      ),
+      Subcelltype = factor(
+        Subcelltype,
+        levels = subtype_levels
+      ),
+      major_group = factor(
+        major_group,
+        levels = c("ALS", "Control")
+      )
+    )
+
+  plot <- ggplot(
+    dotplot_data,
+    aes(
+      x = Subcelltype,
+      y = marker,
+      size = relative_expression,
+      fill = scaled_expression
+    )
+  ) +
+    geom_point(
+      shape = 21,
+      color = "gray50",
+      stroke = 0.15,
+      alpha = 0.9
+    ) +
+    facet_grid(
+      . ~ major_group,
+      scales = "free_x",
+      space = "free_x"
+    ) +
+    scale_y_discrete(
+      limits = rev(selected_markers),
+      labels = marker_labels
+    ) +
+    scale_x_discrete(
+      limits = subtype_levels,
+      drop = FALSE
+    ) +
+    scale_size_area(
+      max_size = 8,
+      limits = c(0, 600),
+      breaks = c(75, 100, 200),
+      labels = c("75%", "100%", "200%")
+    ) +
+    scale_fill_gradient2(
+      low = "lightgray",
+      mid = "white",
+      high = high_color,
+      limits = c(-1, 1),
+      oob = scales::squish
+    ) +
+    labs(
+      title = panel_title,
+      size = "Relative\nexpression",
+      fill = "Scaled\nexpression"
+    ) +
+    theme_classic(base_size = 14) +
+    theme(
+      plot.title = element_text(size = 8, hjust = 0.5),
+      axis.title = element_blank(),
+      axis.text.x = element_text(
+        size = 8,
+        angle = 45,
+        hjust = 1,
+        vjust = 1,
+        color = "black"
+      ),
+      axis.text.y = element_text(size = 8, color = "black"),
+      legend.title = element_text(size = 8),
+      legend.text = element_text(size = 8),
+      strip.text = element_text(size = 8),
+      strip.background = element_rect(fill = "grey90", color = NA),
+      axis.line = element_line(color = "black", linewidth = 0.3),
+      axis.ticks = element_line(color = "black", linewidth = 0.3),
+      axis.ticks.length = grid::unit(3, "pt"),
+      panel.spacing = grid::unit(0.3, "lines"),
+      plot.margin = margin(5, 5, 5, 5)
+    )
+
+  if (!show_y_axis) {
+    plot <- plot + theme(
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank()
+    )
+  }
+
+  if (!show_legend) {
+    plot <- plot + theme(
+      legend.position = "none"
+    )
+  }
+
+  list(
+    plot = plot,
+    data = dotplot_data
+  )
+}
+```
+
+## Generate the combined marker-expression dot plot
+```{r}
+dotplot_settings <- list(
+  Astrocyte = list(
+    object = combined_seurat_Astro,
+    color = "red",
+    title = "Astrocyte"
+  ),
+  Immune = list(
+    object = combined_seurat_Immune,
+    color = "#FFAA00",
+    title = "Immune"
+  ),
+  Excitatory = list(
+    object = combined_seurat_ExcNeuron,
+    color = "#005CE6",
+    title = "Excitatory neuron"
+  )
+)
+
+dotplot_results <- lapply(
+  seq_along(dotplot_settings),
+  function(i) {
+    setting <- dotplot_settings[[i]]
+
+    make_dotplot(
+      seurat_object = setting$object,
+      selected_markers = selected_markers,
+      marker_labels = marker_labels,
+      high_color = setting$color,
+      show_y_axis = i == 1,
+      show_legend = i == length(dotplot_settings),
+      panel_title = setting$title
+    )
+  }
+)
+
+dotplots <- lapply(
+  dotplot_results,
+  `[[`,
+  "plot"
+)
+
+n_subtypes <- vapply(
+  dotplot_settings,
+  function(setting) {
+    nlevels(
+      droplevels(setting$object$Subcelltype)
+    )
+  },
+  integer(1)
+)
+
+combined_plot <- wrap_plots(
+  dotplots,
+  nrow = 1
+) +
+  plot_layout(widths = n_subtypes)
+
+print(combined_plot)
+
+ggsave(
+  filename = file.path(
+    output_folder,
+    "MarkerExpression_Dotplot_Combined.png"
+  ),
+  plot = combined_plot,
+  width = total_width,
+  height = 2.5,
+  units = "in",
+  dpi = 300,
+  limitsize = FALSE,
+  bg = "white"
+)
+```
+
+## Calculate the marker-expression score
+```{r}
+score_markers <- c(
+  "Cell-154Sm-pTDP43",
+  "Cell-145Nd-UBQLN2",
+  "Cell-170Er-APOE",
+  "Cell-147Sm-Glutaminase",
+  "Cell-159Tb-IL6ST"
+)
+
+calculate_score_data <- function(
+    seurat_object,
+    selected_markers
+) {
+  missing_markers <- setdiff(
+    selected_markers,
+    rownames(seurat_object[["Protein"]])
+  )
+
+  if (length(missing_markers) > 0) {
+    stop(
+      "Markers not found in the Protein assay: ",
+      paste(missing_markers, collapse = ", ")
+    )
+  }
+
+  expression_matrix <- as.matrix(
+    GetAssayData(
+      seurat_object,
+      assay = "Protein",
+      layer = "counts"
+    )[selected_markers, , drop = FALSE]
+  )
+
+  expression_matrix <- asinh(expression_matrix)
+
+  marker_means <- rowMeans(
+    expression_matrix,
+    na.rm = TRUE
+  )
+
+  marker_sds <- apply(
+    expression_matrix,
+    1,
+    sd,
+    na.rm = TRUE
+  )
+
+  marker_sds[is.na(marker_sds) | marker_sds == 0] <- 1
+
+  scaled_matrix <- sweep(
+    expression_matrix,
+    1,
+    marker_means,
+    FUN = "-"
+  )
+
+  scaled_matrix <- sweep(
+    scaled_matrix,
+    1,
+    marker_sds,
+    FUN = "/"
+  )
+
+  shifted_matrix <- scaled_matrix + 3
+  shifted_matrix[shifted_matrix < 0] <- 0
+
+  score_data <- data.frame(
+    Cell = colnames(shifted_matrix),
+    score = colSums(shifted_matrix^2, na.rm = TRUE),
+    Subcelltype = as.character(seurat_object$Subcelltype),
+    major_group = as.character(seurat_object$major_group),
+    stringsAsFactors = FALSE
+  )
+
+  subtype_levels <- levels(
+    droplevels(seurat_object$Subcelltype)
+  )
+
+  score_data$Subcelltype <- factor(
+    score_data$Subcelltype,
+    levels = subtype_levels
+  )
+
+  score_data$major_group <- factor(
+    score_data$major_group,
+    levels = c("ALS", "Control")
+  )
+
+  score_data$group <- factor(
+    paste(
+      score_data$major_group,
+      score_data$Subcelltype,
+      sep = "."
+    ),
+    levels = c(
+      paste("ALS", subtype_levels, sep = "."),
+      paste("Control", subtype_levels, sep = ".")
+    )
+  )
+
+  score_data <- score_data[
+    !is.na(score_data$group),
+    ,
+    drop = FALSE
+  ]
+
+  score_summary <- score_data %>%
+    group_by(group) %>%
+    summarise(
+      n_cells = n(),
+      mean_score = mean(score, na.rm = TRUE),
+      se_score = sd(score, na.rm = TRUE) / sqrt(n_cells),
+      .groups = "drop"
+    )
+
+  list(
+    cell_data = score_data,
+    summary = score_summary,
+    n_groups = nlevels(droplevels(score_data$group))
+  )
+}
+```
+
+## Score-plot function
+```{r}
+make_score_plots <- function(
+    score_result,
+    high_color,
+    panel_title,
+    show_y_axis = TRUE,
+    show_legend = FALSE
+) {
+  score_data <- score_result$cell_data
+  score_summary <- score_result$summary
+
+  bar_plot <- ggplot(
+    score_data,
+    aes(
+      x = group,
+      y = score,
+      color = major_group
+    )
+  ) +
+    geom_jitter(
+      alpha = 0.8,
+      size = 0.1,
+      width = 0.2
+    ) +
+    geom_crossbar(
+      data = score_summary,
+      aes(
+        x = group,
+        y = mean_score,
+        ymin = mean_score,
+        ymax = mean_score
+      ),
+      inherit.aes = FALSE,
+      width = 0.6,
+      linewidth = 0.3,
+      color = "black"
+    ) +
+    geom_errorbar(
+      data = score_summary,
+      aes(
+        x = group,
+        ymin = mean_score - se_score,
+        ymax = mean_score + se_score
+      ),
+      inherit.aes = FALSE,
+      width = 0.4,
+      linewidth = 0.6,
+      color = "black"
+    ) +
+    scale_color_manual(
+      values = c(
+        "ALS" = "red",
+        "Control" = "blue"
+      )
+    ) +
+    scale_y_continuous(
+      expand = c(0, 0)
+    ) +
+    labs(
+      title = panel_title,
+      x = NULL,
+      y = "Expression score (AU)"
+    ) +
+    theme_classic(base_size = 16) +
+    theme(
+      plot.title = element_text(
+        size = 12,
+        color = "black",
+        face = "bold",
+        hjust = 0.5
+      ),
+      axis.text.x = element_text(
+        size = 8,
+        color = "black",
+        angle = 45,
+        hjust = 1
+      ),
+      axis.text.y = element_text(size = 10, color = "black"),
+      axis.title.y = element_text(size = 14, color = "black"),
+      legend.position = "none",
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      axis.ticks.length = grid::unit(5, "pt")
+    )
+
+  if (!show_y_axis) {
+    bar_plot <- bar_plot + theme(
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.title.y = element_blank()
+    )
+  }
+
+  heatmap_plot <- ggplot(
+    score_summary,
+    aes(
+      x = group,
+      y = 1,
+      fill = mean_score
+    )
+  ) +
+    geom_tile(color = "white") +
+    scale_fill_gradient(
+      low = "white",
+      high = high_color,
+      name = "Expression\nscore"
+    ) +
+    scale_y_continuous(
+      expand = c(0, 0)
+    ) +
+    labs(
+      title = panel_title,
+      x = NULL,
+      y = NULL
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(
+        size = 12,
+        color = "black",
+        hjust = 0.5
+      ),
+      axis.text.x = element_text(
+        angle = 45,
+        hjust = 1,
+        size = 8,
+        color = "black"
+      ),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      panel.grid = element_blank(),
+      legend.position = if (show_legend) "right" else "none",
+      legend.title = element_text(size = 9, color = "black"),
+      legend.text = element_text(size = 8, color = "black")
+    )
+
+  list(
+    bar_plot = bar_plot,
+    heatmap_plot = heatmap_plot
+  )
+}
+```
+
+## Generate combined score plots
+```{r}
+score_settings <- list(
+  Astrocyte = list(
+    object = combined_seurat_Astro,
+    color = "red",
+    title = "Astrocyte"
+  ),
+  Immune = list(
+    object = combined_seurat_Immune,
+    color = "#FFAA00",
+    title = "Immune"
+  ),
+  Excitatory = list(
+    object = combined_seurat_ExcNeuron,
+    color = "#005CE6",
+    title = "Excitatory neuron"
+  )
+)
+
+score_results <- lapply(
+  score_settings,
+  function(setting) {
+    calculate_score_data(
+      seurat_object = setting$object,
+      selected_markers = score_markers
+    )
+  }
+)
+
+score_plots <- lapply(
+  seq_along(score_settings),
+  function(i) {
+    make_score_plots(
+      score_result = score_results[[i]],
+      high_color = score_settings[[i]]$color,
+      panel_title = score_settings[[i]]$title,
+      show_y_axis = i == 1,
+      show_legend = i == length(score_settings)
+    )
+  }
+)
+
+n_groups <- vapply(
+  score_results,
+  `[[`,
+  integer(1),
+  "n_groups"
+)
+
+bar_combined <- wrap_plots(
+  lapply(score_plots, `[[`, "bar_plot"),
+  nrow = 1
+) +
+  plot_layout(widths = n_groups)
+
+heatmap_combined <- wrap_plots(
+  lapply(score_plots, `[[`, "heatmap_plot"),
+  nrow = 1
+) +
+  plot_layout(widths = n_groups)
+
+print(bar_combined)
+print(heatmap_combined)
+
+ggsave(
+  filename = file.path(
+    output_folder,
+    "Expression_score_heatmap_Combined.png"
+  ),
+  plot = heatmap_combined,
+  width = total_width,
+  height = 1.6,
+  units = "in",
+  dpi = 300,
+  limitsize = FALSE,
+  bg = "white"
+)
+```

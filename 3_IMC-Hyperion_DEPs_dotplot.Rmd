@@ -1,0 +1,479 @@
+# =============================================================================
+# 3_IMC-Hyperion_DEPs_dotplot.Rmd
+#
+# Description:
+# This script computes differential marker expression between ALS and control
+# groups within each major cell type from the integrated Imaging Mass
+# Cytometry (IMC) Seurat object and visualizes the results as a dotplot.
+#
+# Author:
+# Momoka Hikosaka
+# Kyoto University
+#
+# Associated publication:
+# Hikosaka et al. in review
+# "Glial metabolic states in human sporadic amyotrophic lateral sclerosis
+# uncovered by spatial single-cell proteomics."
+#
+# Input:
+# - Integrated Seurat object 
+#
+# Output:
+# - Dotplot showing differential marker expression across cell types
+#
+# License:
+# Copyright (c) 2025 Momoka Hikosaka
+# This code is provided for academic research purposes.
+# =============================================================================
+
+## Environment cleanup
+```{r}
+rm(list = ls())  
+```
+
+# Load required packages
+```{r}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(dplyr)
+  library(ggplot2)
+})
+```
+
+## Output directory
+```{r}
+output_folder <- "output"
+if (!dir.exists(output_folder)) {
+  dir.create(output_folder)
+}
+```
+
+## Load the integrated Seurat object
+```{r}
+combined_seurat<-readRDS("combined_seurat_PrecentralGyrus.rds")
+```
+
+## Define marker panels
+```{r}
+markers_astrocyte <- c(
+  "Cell-141Pr-AQP4",
+  "Cell-158Gd-GFAP"
+)
+
+markers_immune <- c(
+  "Cell-161Dy-CX3CR1",
+  "Cell-164Dy-TMEM119",
+  "Cell-160Gd-IBA1",
+  "Cell-163Dy-CD4",
+  "Cell-155Gd-FoxP3",
+  "Cell-167Er-CD8"
+)
+
+markers_neuron <- c(
+  "Cell-151Eu-MAP2",
+  "Cell-149Sm-C9orf72", # NeuN
+  "Cell-169Tm-ChAT",
+  "Cell-166Er-GAD67"
+)
+
+markers_others <- c(
+  "Cell-175Lu-TDP43",
+  "Cell-154Sm-pTDP43",
+  "Cell-168Er-FUS",
+  "Cell-152Sm-ATXN2",
+  "Cell-145Nd-UBQLN2",
+  "Cell-170Er-APOE",
+  "Cell-176Yb-TBK1",
+  "Cell-162Dy-pTBK1",
+  "Cell-147Sm-Glutaminase",
+  "Cell-143Nd-SQSTM1",
+  "Cell-156Gd-CH24H",
+  "Cell-153Eu-ORF1",
+  "Cell-159Tb-IL6ST",
+  "Cell-165Ho-PD1",
+  "Cell-150Nd-PDL1",
+  "Cell-172Yb-PDL2",
+  "Cell-171Yb-TREM2",
+  "Cell-174Yb-MHCclassII"
+)
+
+markers <- c(
+  markers_astrocyte,
+  markers_immune,
+  markers_neuron,
+  markers_others
+)
+
+marker_labels <- c(
+  "Cell-141Pr-AQP4"          = "AQP4",
+  "Cell-143Nd-SQSTM1"        = "SQSTM1",
+  "Cell-145Nd-UBQLN2"        = "UBQLN2",
+  "Cell-147Sm-Glutaminase"   = "GLS",
+  "Cell-149Sm-C9orf72"       = "NeuN",
+  "Cell-150Nd-PDL1"          = "PDL1",
+  "Cell-151Eu-MAP2"          = "MAP2",
+  "Cell-152Sm-ATXN2"         = "ATXN2",
+  "Cell-153Eu-ORF1"          = "ORF1",
+  "Cell-154Sm-pTDP43"        = "pTDP43",
+  "Cell-155Gd-FoxP3"         = "FOXP3",
+  "Cell-156Gd-CH24H"         = "CH24H",
+  "Cell-158Gd-GFAP"          = "GFAP",
+  "Cell-159Tb-IL6ST"         = "IL6ST",
+  "Cell-160Gd-IBA1"          = "IBA1",
+  "Cell-161Dy-CX3CR1"        = "CX3CR1",
+  "Cell-162Dy-pTBK1"         = "pTBK1",
+  "Cell-163Dy-CD4"           = "CD4",
+  "Cell-164Dy-TMEM119"       = "TMEM119",
+  "Cell-165Ho-PD1"           = "PD1",
+  "Cell-166Er-GAD67"         = "GAD67",
+  "Cell-167Er-CD8"           = "CD8",
+  "Cell-168Er-FUS"           = "FUS",
+  "Cell-169Tm-ChAT"          = "ChAT",
+  "Cell-170Er-APOE"          = "APOE",
+  "Cell-171Yb-TREM2"         = "TREM2",
+  "Cell-172Yb-PDL2"          = "PDL2",
+  "Cell-174Yb-MHCclassII"    = "MHCII",
+  "Cell-175Lu-TDP43"         = "TDP43",
+  "Cell-176Yb-TBK1"          = "TBK1"
+)
+```
+
+## Define the analysis settings
+```{r}
+celltype_order <- c(
+  "Astrocyte",
+  "Immune",
+  "Excitatory",
+  "Inhibitory",
+  "Others"
+)
+
+# Retain only cell types present in the Seurat object
+celltypes_use <- celltype_order[
+  celltype_order %in% unique(combined_seurat$Celltype)
+]
+
+# Markers displayed in the differential-expression dot plot
+selected_markers <- markers_others
+
+# Display ranges
+cohens_d_range <- c(-1.5, 1.5)
+q_threshold <- 10
+```
+
+
+## Calculate differential marker expression
+```{r}
+compute_stats_one <- function(
+    seu,
+    celltype,
+    markers,
+    assay = "Protein",
+    layer = "counts",
+    q_threshold = 10
+) {
+
+  # Select ALS and control cells belonging to the specified cell type
+  object <- subset(
+    seu,
+    subset =
+      Celltype == celltype &
+      major_group %in% c("ALS", "Control")
+  )
+
+  # Extract protein-expression values
+  expression_matrix <- as.matrix(
+    GetAssayData(
+      object,
+      assay = assay,
+      layer = layer
+    )
+  )
+
+  # Inverse hyperbolic sine transformation
+  expression_matrix <- asinh(expression_matrix)
+
+  als_cells <- colnames(object)[
+    object$major_group == "ALS"
+  ]
+
+  control_cells <- colnames(object)[
+    object$major_group == "Control"
+  ]
+
+  if (length(als_cells) < 2 || length(control_cells) < 2) {
+    warning(
+      "Insufficient cells for ",
+      celltype,
+      "; this cell type was skipped."
+    )
+    return(NULL)
+  }
+
+  # Group means
+  mean_als <- rowMeans(
+    expression_matrix[, als_cells, drop = FALSE],
+    na.rm = TRUE
+  )
+
+  mean_control <- rowMeans(
+    expression_matrix[, control_cells, drop = FALSE],
+    na.rm = TRUE
+  )
+
+  mean_all <- rowMeans(
+    expression_matrix,
+    na.rm = TRUE
+  )
+
+  # Group standard deviations
+  sd_als <- apply(
+    expression_matrix[, als_cells, drop = FALSE],
+    1,
+    sd,
+    na.rm = TRUE
+  )
+
+  sd_control <- apply(
+    expression_matrix[, control_cells, drop = FALSE],
+    1,
+    sd,
+    na.rm = TRUE
+  )
+
+  n_als <- length(als_cells)
+  n_control <- length(control_cells)
+
+  # Pooled standard deviation
+  pooled_sd <- sqrt(
+    (
+      (n_als - 1) * sd_als^2 +
+      (n_control - 1) * sd_control^2
+    ) /
+      (n_als + n_control - 2)
+  )
+
+  # Cohen's d
+  cohens_d <- ifelse(
+    pooled_sd > 0,
+    (mean_als - mean_control) / pooled_sd,
+    NA_real_
+  )
+
+  # Log2 fold change calculated from the transformed mean values
+  log2fc <- log2(
+    (mean_als + 1) /
+      (mean_control + 1)
+  )
+
+  # Wilcoxon rank-sum test
+  p_values <- apply(
+    expression_matrix,
+    1,
+    function(expression_values) {
+      wilcox.test(
+        expression_values[als_cells],
+        expression_values[control_cells],
+        exact = FALSE
+      )$p.value
+    }
+  )
+
+  # Benjamini-Hochberg correction across all measured markers
+  # within the current cell type
+  p_adjusted <- p.adjust(
+    p_values,
+    method = "BH"
+  )
+
+  minus_log10_fdr <- -log10(p_adjusted)
+
+  # Custom composite score
+  q_value <- abs(cohens_d) * minus_log10_fdr
+
+  results <- data.frame(
+    Marker = rownames(expression_matrix),
+    Celltype = celltype,
+    n_ALS = n_als,
+    n_Control = n_control,
+    Mean_ALS = mean_als,
+    Mean_Control = mean_control,
+    Mean_all = mean_all,
+    log2FC = log2fc,
+    Cohens_d = cohens_d,
+    P_value = p_values,
+    FDR = p_adjusted,
+    minus_log10_FDR = minus_log10_fdr,
+    q_value = q_value,
+    q_above_threshold = q_value > q_threshold,
+    stringsAsFactors = FALSE
+  )
+
+  # Retain the markers selected for visualization
+  results <- results[
+    results$Marker %in% markers,
+    ,
+    drop = FALSE
+  ]
+
+  results
+}
+```
+
+## Apply the analysis to each major cell type
+```{r}
+stats_list <- lapply(
+  celltypes_use,
+  compute_stats_one,
+  seu = combined_seurat,
+  markers = selected_markers,
+  assay = "Protein",
+  layer = "counts",
+  q_threshold = q_threshold
+)
+
+stats_all <- bind_rows(stats_list)
+```
+
+
+## Set the marker and cell-type order
+```{r}
+marker_order <- selected_markers[
+  selected_markers %in% stats_all$Marker
+]
+
+stats_all$Marker <- factor(
+  stats_all$Marker,
+  levels = rev(marker_order)
+)
+
+stats_all$Celltype <- factor(
+  stats_all$Celltype,
+  levels = celltypes_use
+)
+```
+
+
+## Scale the mean expression used for dot size
+```{r}
+stats_all <- stats_all %>%
+  group_by(Marker) %>%
+  mutate(
+    Mean_expression_scaled = {
+      quantile_limits <- quantile(
+        Mean_all,
+        probs = c(0.01, 0.95),
+        na.rm = TRUE
+      )
+
+      clipped_values <- scales::squish(
+        Mean_all,
+        range = quantile_limits
+      )
+
+      if (diff(range(clipped_values, na.rm = TRUE)) == 0) {
+        rep(0.5, length(clipped_values))
+      } else {
+        scales::rescale(
+          clipped_values,
+          to = c(0, 1)
+        )
+      }
+    }
+  ) %>%
+  ungroup()
+
+stats_all$Significance <- ifelse(
+  stats_all$q_above_threshold,
+  "*",
+  ""
+)
+```
+
+
+## Generate the differential-expression dot plot
+```{r}
+p <- ggplot(
+  stats_all,
+  aes(
+    x = Celltype,
+    y = Marker
+  )
+) +
+  geom_point(
+    aes(
+      size = Mean_expression_scaled,
+      fill = Cohens_d
+    ),
+    shape = 21,
+    colour = "grey40",
+    stroke = 0.5
+  ) +
+  geom_text(
+    aes(label = Significance),
+    size = 12,
+    vjust = 0.8
+  ) +
+  scale_size(
+    range = c(2, 15),
+    limits = c(0, 1),
+    name = "Relative\nexpression"
+  ) +
+  scale_fill_gradientn(
+    colours = c(
+      "blue",
+      "#F2F2F2",
+      "white",
+      "#F2F2F2",
+      "red"
+    ),
+    values = scales::rescale(
+      c(-1.5, -0.2, 0, 0.2, 1.5)
+    ),
+    limits = cohens_d_range,
+    oob = scales::squish,
+    name = "Cohen's d"
+  ) +
+  scale_y_discrete(
+    labels = marker_labels
+  ) +
+  theme_classic(
+    base_family = "Arial"
+  ) +
+  theme(
+    axis.title = element_blank(),
+    axis.text.y = element_text(
+      size = 16,
+      color = "black"
+    ),
+    axis.text.x = element_text(
+      angle = 90,
+      size = 16,
+      color = "black",
+      vjust = 0.5,
+      hjust = 1
+    ),
+    legend.title = element_text(
+      size = 12
+    ),
+    legend.text = element_text(
+      size = 10
+    )
+  )
+
+print(p)
+
+ggsave(
+  filename = file.path(
+    output_folder,
+    "DEP_dotplot.png"
+  ),
+  plot = p,
+  width = 6,
+  height = 10,
+  units = "in",
+  dpi = 300,
+  limitsize = FALSE,
+  bg = "white"
+)
+```

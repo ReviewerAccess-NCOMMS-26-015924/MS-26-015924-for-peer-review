@@ -1,0 +1,223 @@
+# =============================================================================
+# 5_IMC-Hyperion_Monocle_trajectory.Rmd
+#
+# Description:
+# This script infers and visualizes a predicted cellular continuum using
+# Monocle3 pseudotime analysis.
+#
+# Author:
+# Momoka Hikosaka
+# Kyoto University
+#
+# Associated publication:
+# Hikosaka et al. in review
+# "Glial metabolic states in human sporadic amyotrophic lateral sclerosis
+# uncovered by spatial single-cell proteomics."
+#
+# Input:
+# - Integrated Seurat object
+#
+# Output:
+# - Monocle3 cell trajectory object
+#
+# License:
+# Copyright (c) 2025 Momoka Hikosaka
+# This code is provided for academic research purposes.
+# =============================================================================
+
+## Environment cleanup
+```{r}
+rm(list = ls())  
+```
+
+## Load required packages
+```{r}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(dplyr)
+  library(ggplot2)
+  library(monocle3)
+  library(SeuratWrappers)
+})
+```
+
+## Output directory
+```{r}
+output_folder <- "output"
+if (!dir.exists(output_folder)) {
+  dir.create(output_folder)
+}
+```
+
+## Load the integrated Seurat object and select ALS astrocytes
+```{r}
+combined_seurat<-readRDS("combined_seurat_PrecentralGyrus.rds")
+
+astro_als <- subset(
+  combined_seurat,
+  subset = Celltype == "Astrocyte" & major_group == "ALS"
+)
+```
+
+## Calculate the marker-based score used to select the root cell
+```{r}
+root_markers <- c(
+  "Cell-154Sm-pTDP43",
+  "Cell-145Nd-UBQLN2",
+  "Cell-170Er-APOE",
+  "Cell-147Sm-Glutaminase",
+  "Cell-159Tb-IL6ST"
+)
+
+protein_counts <- GetAssayData(
+  astro_als,
+  assay = "Protein",
+  layer = "counts"
+)
+
+missing_markers <- setdiff(root_markers, rownames(protein_counts))
+if (length(missing_markers) > 0) {
+  stop("Missing root-score markers: ", paste(missing_markers, collapse = ", "))
+}
+
+marker_matrix <- asinh(
+  as.matrix(protein_counts[root_markers, , drop = FALSE])
+)
+
+# Z-score each marker across cells. Markers with zero variance are assigned 0.
+marker_z <- t(scale(t(marker_matrix)))
+marker_z[!is.finite(marker_z)] <- 0
+
+marker_shifted <- marker_z + 3
+marker_shifted[marker_shifted < 0] <- 0
+
+root_score <- colSums(marker_shifted^2)
+root_cell <- names(which.min(root_score))
+```
+
+## Construct the Monocle3 trajectory
+```{r}
+cds <- as.cell_data_set(astro_als)
+
+reducedDims(cds)$PCA <- Embeddings(astro_als, reduction = "harmony")
+
+colData(cds)$Subcelltype <- astro_als$Subcelltype
+colData(cds)$major_group <- astro_als$major_group
+
+cds <- reduce_dimension(
+  cds,
+  reduction_method = "UMAP",
+  preprocess_method = "PCA",
+  umap.min_dist = 0.001,
+  umap.n_neighbors = 10,
+  umap.nn_method = "annoy",
+  umap.fast_sgd = FALSE,
+  cores = 1
+)
+
+cds <- cluster_cells(cds, reduction_method = "UMAP")
+
+cds <- learn_graph(
+  cds,
+  use_partition = TRUE,
+  learn_graph_control = list(minimal_branch_len = 15)
+)
+
+cds <- order_cells(cds, root_cells = root_cell)
+```
+
+## Plotting settings
+```{r}
+subcelltype_colors <- c(
+  "Astro_1" = "#FF5A5A",
+  "Astro_2" = "#FF7794",
+  "Astro_3" = "#FF8FC2",
+  "Astro_4" = "#FFB0D8",
+  "Astro_5" = "#FFD4C2"
+)
+
+trajectory_theme <- theme_classic() +
+  theme(
+    axis.text = element_text(size = 20, color = "black"),
+    axis.title = element_text(size = 20, color = "black"),
+    legend.text = element_text(size = 20, color = "black"),
+    legend.title = element_text(size = 20, color = "black"),
+    legend.position = "right",
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = grid::unit(5, "pt"),
+    strip.text = element_text(size = 20, color = "black")
+  )
+
+save_trajectory_plot <- function(plot_object, file_stem) {
+  ggsave(
+    filename = file.path(output_folder, paste0(file_stem, ".png")),
+    plot = plot_object,
+    width = 8,
+    height = 8,
+    units = "in",
+    dpi = 300,
+    limitsize = FALSE
+  )
+}
+```
+
+## Pseudotime trajectory
+```{r}
+p_pseudotime <- plot_cells(
+  cds,
+  color_cells_by = "pseudotime",
+  label_cell_groups = FALSE,
+  group_cells_by = "Subcelltype",
+  label_leaves = FALSE,
+  label_branch_points = FALSE,
+  label_roots = FALSE,
+  cell_size = 2.5,
+  show_trajectory_graph = TRUE,
+  trajectory_graph_color = "green",
+  trajectory_graph_segment_size = 2
+) +
+  coord_cartesian(xlim = c(-6, 6), ylim = c(-6, 6)) +
+  scale_x_reverse() +
+  trajectory_theme
+
+print(p_pseudotime)
+save_trajectory_plot(p_pseudotime, "Celltransition_Astrocyte_1")
+```
+
+## Subcell-type trajectory
+```{r}
+observed_subcelltypes <- unique(as.character(colData(cds)$Subcelltype))
+missing_colors <- setdiff(observed_subcelltypes, names(subcelltype_colors))
+
+if (length(missing_colors) > 0) {
+  stop(
+    "No plotting colors were specified for: ",
+    paste(missing_colors, collapse = ", ")
+  )
+}
+
+p_subcelltype <- plot_cells(
+  cds,
+  color_cells_by = "Subcelltype",
+  label_cell_groups = FALSE,
+  group_cells_by = "Subcelltype",
+  label_leaves = FALSE,
+  label_branch_points = FALSE,
+  label_roots = FALSE,
+  cell_size = 2.5,
+  show_trajectory_graph = TRUE,
+  trajectory_graph_color = "green",
+  trajectory_graph_segment_size = 2
+) +
+  scale_color_manual(
+    values = subcelltype_colors,
+    name = "Subcelltype"
+  ) +
+  coord_cartesian(xlim = c(-6, 6), ylim = c(-6, 6)) +
+  scale_x_reverse() +
+  trajectory_theme
+
+print(p_subcelltype)
+save_trajectory_plot(p_subcelltype, "Celltransition_Astrocyte_2")
+```
+
