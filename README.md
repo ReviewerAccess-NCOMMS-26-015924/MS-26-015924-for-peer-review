@@ -1,185 +1,242 @@
-# MS-26-015924-for-peer-review
-ALS Brain IMC Study – Analysis Code
-Authors: Momoka Hikosaka, and Gen Ohtsuki, Ph.D.
-Date: March 7, 2026
-This repository contains the analysis code used in the submitted manuscript (NCOMMS-26-015924). The code is provided for review purposes and reproduces the computational analyses performed in the study.
-________________________________________
-Repository Contents
+# ALS Brain IMC Study – Analysis Code
+
+**Manuscript ID:** NCOMMS-26-015924
+
+**Authors:** Momoka Hikosaka and Gen Ohtsuki, Ph.D.
+
+**Last updated:** September 12, 2026
+
+This repository contains the analysis code used in the revised manuscript (NCOMMS-26-015924). The code is provided for peer-review and reproducibility purposes and reproduces the computational analyses performed in the study.
+
+---
+
+## Repository Contents
+
 The repository includes the following analysis modules:
-1.	IMC Preprocessing (MATLAB)
 
-o	IMC signal filtering
+1. [IMC Preprocessing (MATLAB)](#1-imc-preprocessing-matlab)
+2. [IMC Proteomics Spillover Correction (MATLAB)](#2-imc-proteomics-spillover-correction-matlab)
+3. [IMC Proteomics Clustering (R)](#3-imc-proteomics-clustering-r)
+4. [iPSC-Derived Astrocyte Bulk RNA-seq Analysis (WSL and R)](#4-ipsc-derived-astrocyte-bulk-rna-seq-analysis-wsl-and-r)
+5. [Public Data Analysis (R)](#5-public-data-analysis-r)
 
-o	Nuclear detection correction
+---
 
-o	Field-of-view (FOV) correction
+## 1. IMC Preprocessing (MATLAB)
 
-2.	IMC Proteomics Clustering (R)
-3.	ALS Distance Analysis (MATLAB)
-4.	Public Data Analysis (R)
-________________________________________
-Module Descriptions
-1. IMC Preprocessing (MATLAB)
+We provide the preprocessing code used to correct IMC signal-detection errors, nuclear-detection errors, and field-of-view (FOV) boundaries.
 
-We provide the preprocessing code used to correct IMC signal detection errors, nuclear detection errors, and field-of-view (FOV) boundaries. After applying these preprocessing steps, a flag called Sel01 is added to each cell. Cells marked with Sel01 = 1 indicate cells retained for downstream analyses.
+After these preprocessing steps are applied, a flag named `Sel01` is added to each cell. Cells marked with `Sel01 = 1` are retained for downstream analyses.
 
-The IMC proteomics data have been deposited in Zenodo (an open-access repository developed under the European OpenAIRE program and operated by CERN) under the accession number DOI: 10.5281/zenodo.18823151 (https://zenodo.org/records/18823151). Please locate the folder “IMC_preprocessing_raw_csv” and use the data contained within.
+### Demo data
 
-o	IMC signal filtering
+One representative sample is included as a demonstration dataset:
 
-To remove putative signal detection errors, manual upper-threshold filtering is applied. Cells with expression values above a manually selected threshold are replaced with NaN in the output table.
+* `SpinalCord_02_ALS.csv` — single-cell signal table
+* `Ir_image_SpinalCord_02_ALS.tiff` — corresponding Ir-channel image
 
-o	Nuclear detection correction (Matlab)
+### Full dataset
 
-For refinement of single-cell identification with Cell Profiler v4.2.1 and histoCAT, we developed a custom MATLAB-based computational algorithm to identify multiple detections originating from the same cell, thereby maximizing the accuracy of cell-identification.
+The complete IMC proteomics dataset has been deposited in Zenodo, an open-access repository developed under the European OpenAIRE program and operated by CERN.
 
-o	Field-of-view (FOV) correction (Matlab)
+* **Zenodo record:** 10.5281/zenodo.22708058
+* **DOI:** https://doi.org/10.5281/zenodo.22708058
 
-We also implemented a field-of-view (FOV) correction code that refines the region used for analysis in IMC spatial data, particularly for spinal cord tissue.
+### IMC signal filtering
 
-________________________________________
-2. IMC Clustering (R)
+To remove putative signal-detection errors, manual upper-threshold filtering is applied. Expression values above a manually selected threshold are replaced with `NaN` in the output table.
 
-We provide the code used for proteomics clustering IMC-derived single-cell proteomic data, "preprocessed_csv” files in the associated folder.
+### Nuclear-detection correction
 
-The IMC proteomics data have been deposited in Zenodo (an open-access repository developed under the European OpenAIRE program and operated by CERN) under the accession number DOI: 10.5281/zenodo.18823151 (https://zenodo.org/records/18823151). Please locate the folder “IMC_clustering_rds” and use the data contained within.
+To refine single-cell identification performed using CellProfiler v4.2.1 and histoCAT, we developed a custom MATLAB-based computational algorithm to identify multiple detections originating from the same cell, thereby improving the accuracy of cell identification.
 
-IMC_Seurat_clustering.rmd
+### Field-of-view correction
 
-This script performs single-cell protein clustering of Imaging Mass Cytometry (IMC) data using the Seurat framework.
-The workflow includes data loading, preprocessing, integration, dimensionality reduction, clustering, and visualization of cell populations.
+We also implemented a field-of-view correction algorithm to refine the regions included in the analysis of IMC spatial data, particularly for spinal cord tissue.
 
-IMC_subclustering.rmd
+---
 
-This script performs subclustering analysis of major cell populations identified from Imaging Mass Cytometry (IMC) single-cell protein data.
+## 2. IMC Proteomics Spillover Correction (MATLAB)
 
-IMC_DEPs_heatmap.rmd
+We provide an in-house MATLAB program for spillover-signal compensation.
 
-This script computes differential marker expression between ALS and control groups within each major cell type from the integrated IMC Seurat object and visualizes the results as a heatmap.
+The program takes single-cell data in CSV format extracted from MCD files and corrects signal spillover using the signal-overlap matrices provided by Standard BioTools, Inc.:
 
-IMC_marker_expression_profiles.rmd
+* `Signal Overlap Matrix_ALS_Hyperion.xlsx` for the Hyperion dataset
+* `Signal Overlap Matrix_ALS_HypXTi.xlsx` for the Hyperion XTi dataset
 
-This script generates dot plots showing marker expression across subcelltypes for selected major cell classes from the integrated IMC Seurat object.
+The program outputs spillover-corrected values as CSV files with the suffix `_SOc.csv`.
 
-IMC_cell_transition.rmd
+### Hyperion spillover-correction code
 
-This script performs cell-state transition analysis of astrocyte subcelltypes identified from integrated IMC single-cell protein data, using Monocle 3 (https://cole-trapnell-lab.github.io/monocle3/).
+`[spillover correction code for Hyperion].m`
 
- 
-The parameters in these scripts are currently optimized for the Precentral gyrus dataset.
-For parameter settings used for other brain regions, please refer to IMC_analysis_parameters.txt.
- 
-________________________________________
-3. ALS Distance Analysis (MATLAB)
+This script corrects single-cell data acquired using the Hyperion platform. It should be used with:
 
-This module contains MATLAB scripts used to analyze spatial relationships among distinct cell clusters.
+* `Signal Overlap Matrix_ALS_Hyperion.xlsx`
+* `Hyperion_PrecentralGyrus_01_ALS.csv` (demo dataset)
 
-The algorithm:
+### Hyperion XTi spillover-correction code
 
-•	Calculates pairwise distances between cells within defined clusters
+`[spillover correction code for Hyperion XTi].m`
 
-•	Evaluates whether spatial differences between clusters are statistically significant
+This script corrects single-cell data acquired using the Hyperion XTi platform. It should be used with:
 
-•	Summarizes the results to determine whether significant spatial correlations are present
+* `Signal Overlap Matrix_ALS_HypXTi.xlsx`
+* `HyperionXTi_PrecentralGyrus_13_ALS_1.csv` (demo dataset)
 
-Running the Distance Analysis
+The corresponding raw MCD data and spillover-corrected single-cell data are available in the following folders in the [Zenodo record](https://doi.org/10.5281/zenodo.22708058):
 
-Download all files and place them in a single directory.
+* `IMC-Hyperion_mcd`
+* `IMC-Hyperion_csv_SOc`
+* `IMC-HyperionXTi_mcd`
+* `IMC-HyperionXTi_csv_SOc`
 
-Run the scripts in the following order:
+---
 
-ALS_Distance_Analysis_1_ALS_F_FrontalCrtx_240511_2_260306_hikosaka.m
+## 3. IMC Proteomics Clustering (R)
 
-...
+We provide the code used for single-cell proteomic clustering of IMC-derived data after spillover correction.
 
-ALS_Distance_Analysis_6_ALS_M_SpinalCord_240424_1_260306_hikosaka.m
+Spillover-corrected single-cell tables are provided separately for the two instrument platforms used in this study:
 
+* `IMC-Hyperion_csv_SOc`
+* `IMC-HyperionXTi_csv_SOc`
 
-After completing the above scripts, run the final script:
+The corresponding integrated Seurat objects generated by the clustering workflow are provided in:
 
-ALS_Distance_Analysis_Total_analysis_260306_hikosaka.m
+* `IMC-Hyperion_rds`
+* `IMC-HyperionXTi_rds`
 
-________________________________________
-4. Public Data Analysis (R)
+These data are available in the [Zenodo record](https://zenodo.org/records/18823151).
 
-We provide R scripts used to analyze publicly available single-cell RNA-seq data from ALS and control samples (GEO: GSE174332; Pineda et al., Cell 2024) (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE174332).
+### `1_IMC-Hyperion_Seurat_clustering.Rmd`
 
-GSM5292194  201019_ALS_101_snRNA-B1
+This script performs single-cell protein clustering of Hyperion imaging mass cytometry data using the Seurat framework. The workflow includes data loading, preprocessing, integration, dimensionality reduction, clustering, and visualization of cell populations.
 
-GSM5292195  201019_ALS_102_snRNA-B2
+### `1_IMC-HyperionXTi_Seurat_clustering.Rmd`
 
-GSM5292196  201019_ALS_103_snRNA-B3
+This script performs single-cell protein clustering of Hyperion XTi imaging mass cytometry data using the Seurat framework. Subsequent analyses and visualizations are performed using the same general workflow as that used for the Hyperion dataset.
 
-GSM5292197  201019_ALS_104_snRNA-B4
+### `2_IMC-Hyperion_Heatmap.Rmd`
 
-GSM5292198  201019_ALS_106_snRNA-B5
+This script calculates the mean protein expression for each major cell type, applies Z-score scaling across cell types for each marker, and generates a heatmap.
 
-GSM5292199  201019_ALS_108_snRNA-B6
+### `3_IMC-Hyperion_DEPs_dotplot.Rmd`
 
-GSM5292143  191112_ALS_110_snRNA-B9
+This script calculates differential marker expression between the ALS and control groups within each major cell type using the integrated IMC Seurat object and visualizes the results as a dot plot.
 
-GSM5292144  191112_ALS_111_snRNA-B10
+### `4_IMC-Hyperion_Reclustering.Rmd`
 
-GSM5292145  191112_ALS_112_snRNA-D1
+This script performs subclustering analyses of the major cell populations identified from IMC single-cell protein data. It also generates dot plots showing marker expression across cellular subtypes for selected major cell classes in the integrated IMC Seurat object.
 
-GSM5292148  191112_ALS_116_snRNA-C2
+### `5_IMC-Hyperion_Monocle_trajectory.Rmd`
 
-GSM5292149  191112_ALS_117_snRNA-C3
+This script uses Monocle 3 to infer and visualize a predicted cellular continuum among astrocyte subtypes identified from integrated IMC single-cell protein data.
 
-GSM5292150  191112_ALS_118_snRNA-C4
+For information about Monocle 3, see the [Monocle 3 documentation](https://cole-trapnell-lab.github.io/monocle3/).
 
-GSM5292151  191112_ALS_120_snRNA-A1
+> **Note:** The parameters used in these scripts are currently optimized for the precentral gyrus dataset.
 
-GSM5292152  191112_ALS_122_snRNA-D2
+---
 
-GSM5292153  191112_ALS_124_snRNA-A3
+## 4. iPSC-Derived Astrocyte Bulk RNA-seq Analysis (WSL and R)
 
-GSM5292154  191112_ALS_126_snRNA-A6
+This module contains the scripts used to preprocess and analyze bulk RNA-seq data obtained from iPSC-derived astrocytes at 1 and 4 weeks.
 
-GSM5292155  191112_ALS_127_snRNA-A4
+The workflow includes:
 
+* Read preprocessing
+* Alignment to the human reference genome
+* Gene-level quantification
+* Expression normalization
+* Differential-expression analysis
+* Heatmap visualization
+* Preparation of pre-ranked gene lists for gene set enrichment analysis (GSEA)
 
-GSM5292174  191114_PN_301_snRNA-E7
+The raw RNA-seq data have been deposited in the Gene Expression Omnibus (GEO) under accession number **GSE###**.
 
-GSM5292193  200721_PN_302_snRNA-B4
+### `1_RNAseq_preprocessing.sh`
 
-GSM5292175  191114_PN_303_snRNA-E8
+This script performs read preprocessing using fastp and paired-end alignment to the human reference genome using HISAT2. The resulting alignments are coordinate-sorted, indexed, and summarized using samtools.
 
-GSM5292176  191114_PN_304_snRNA-E9
+### `2_RNAseq_featurecounts.sh`
 
-GSM5292177  191114_PN_306_snRNA-E10
+This script quantifies gene-level expression from coordinate-sorted BAM files using featureCounts. All available samples are quantified in a single run to generate a combined count matrix and its corresponding read-assignment summary.
 
-GSM5292178  191114_PN_307_snRNA-E11
+### `3_RNAseq_normalize_counts.R`
 
-GSM5292180  191114_PN_309_snRNA-F1
+This script imports the gene-level featureCounts matrix, assigns sample metadata, filters lowly expressed genes using edgeR, calculates trimmed mean of M-values (TMM) normalization factors, and generates TPM and `log2(TPM + 1)` expression matrices.
 
-GSM5292201  201019_PN_311_snRNA-B8
+### `4_RNAseq_top_DEG_heatmaps.R`
 
-GSM5292181  191114_PN_317_snRNA-F2
+This script independently identifies the top differentially expressed genes at 1 and 4 weeks using limma, visualizes their expression in heatmaps, and exports the genes assigned to each heatmap row cluster for enrichment analysis.
 
-GSM5292182  191114_PN_318_snRNA-F3
+### `5_RNAseq_prepare_GSEA_ranked_list.R`
 
-GSM5292183  191114_PN_319_snRNA-F4
+This script uses limma to calculate moderated *t*-statistics for the comparison between ETP10- and ETP0-treated 1-week astrocytes and exports a pre-ranked gene list for GSEA Pre-ranked analysis.
 
-GSM5292184  191114_PN_322_snRNA-F5
+---
 
-GSM5292185  191114_PN_323_snRNA-F6
+## 5. Public Data Analysis (R)
 
-GSM5292186  191114_PN_324_snRNA-F7
+We provide R scripts used to analyze publicly available single-nucleus RNA-seq data from ALS and control samples obtained from GEO accession [GSE174332](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE174332) (Pineda et al., *Cell*, 2024).
 
-GSM5292187  191114_PN_325_snRNA-F8
+### Samples
 
-GSM5292188  191114_PN_328_snRNA-F9
+#### ALS samples
 
+| GEO accession | Sample ID                  |
+| ------------- | -------------------------- |
+| GSM5292194    | `201019_ALS_101_snRNA-B1`  |
+| GSM5292195    | `201019_ALS_102_snRNA-B2`  |
+| GSM5292196    | `201019_ALS_103_snRNA-B3`  |
+| GSM5292197    | `201019_ALS_104_snRNA-B4`  |
+| GSM5292198    | `201019_ALS_106_snRNA-B5`  |
+| GSM5292199    | `201019_ALS_108_snRNA-B6`  |
+| GSM5292143    | `191112_ALS_110_snRNA-B9`  |
+| GSM5292144    | `191112_ALS_111_snRNA-B10` |
+| GSM5292145    | `191112_ALS_112_snRNA-D1`  |
+| GSM5292148    | `191112_ALS_116_snRNA-C2`  |
+| GSM5292149    | `191112_ALS_117_snRNA-C3`  |
+| GSM5292150    | `191112_ALS_118_snRNA-C4`  |
+| GSM5292151    | `191112_ALS_120_snRNA-A1`  |
+| GSM5292152    | `191112_ALS_122_snRNA-D2`  |
+| GSM5292153    | `191112_ALS_124_snRNA-A3`  |
+| GSM5292154    | `191112_ALS_126_snRNA-A6`  |
+| GSM5292155    | `191112_ALS_127_snRNA-A4`  |
 
-scRNAseq_Seurat.rmd
+#### Control samples
 
-This script performs Seurat-based integration and clustering analysis of publicly available single-cell RNA-seq data from ALS and control samples.
- 
-scRNAseq_expression.rmd
+| GEO accession | Sample ID                 |
+| ------------- | ------------------------- |
+| GSM5292174    | `191114_PN_301_snRNA-E7`  |
+| GSM5292193    | `200721_PN_302_snRNA-B4`  |
+| GSM5292175    | `191114_PN_303_snRNA-E8`  |
+| GSM5292176    | `191114_PN_304_snRNA-E9`  |
+| GSM5292177    | `191114_PN_306_snRNA-E10` |
+| GSM5292178    | `191114_PN_307_snRNA-E11` |
+| GSM5292180    | `191114_PN_309_snRNA-F1`  |
+| GSM5292201    | `201019_PN_311_snRNA-B8`  |
+| GSM5292181    | `191114_PN_317_snRNA-F2`  |
+| GSM5292182    | `191114_PN_318_snRNA-F3`  |
+| GSM5292183    | `191114_PN_319_snRNA-F4`  |
+| GSM5292184    | `191114_PN_322_snRNA-F5`  |
+| GSM5292185    | `191114_PN_323_snRNA-F6`  |
+| GSM5292186    | `191114_PN_324_snRNA-F7`  |
+| GSM5292187    | `191114_PN_325_snRNA-F8`  |
+| GSM5292188    | `191114_PN_328_snRNA-F9`  |
 
-This script loads a Seurat object and performs gene expression visualization and statistical analysis.
+### `scRNAseq_Seurat.Rmd`
 
-________________________________________
-Notes
-This repository is provided for peer review and reproducibility purposes. Additional documentation may be added after manuscript acceptance.
+This script performs Seurat-based integration and clustering of publicly available single-nucleus RNA-seq data from ALS and control samples.
+
+### `scRNAseq_expression.Rmd`
+
+This script loads the integrated Seurat object and performs gene-expression visualization and statistical analysis.
+
+---
+
+## Notes
+
+This repository is provided for peer-review and reproducibility purposes. Additional documentation may be added following manuscript acceptance.
