@@ -47,10 +47,13 @@ We provide R scripts used to analyze publicly available single-nucleus RNA-seq d
 | GSM5292187    | `191114_PN_325_snRNA-F8`  |
 | GSM5292188    | `191114_PN_328_snRNA-F9`  |
 
-### `scRNAseq_Seurat.Rmd`
+
+### Analysis code
+
+`scRNAseq_Seurat.Rmd`
 
 This script performs Seurat-based integration and clustering of publicly available single-nucleus RNA-seq data from ALS and control samples.
 
-### `scRNAseq_expression.Rmd`
+`scRNAseq_expression.Rmd`
 
 This script loads the integrated Seurat object and performs gene-expression visualization and statistical analysis.
