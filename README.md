@@ -20,12 +20,18 @@ The complete IMC proteomics dataset has been deposited in Zenodo, an open-access
 
 ### IMC signal filtering
 
+`IMC_signal_filtering.m`
+
 To remove putative signal-detection errors, manual upper-threshold filtering is applied. Expression values above a manually selected threshold are replaced with `NaN` in the output table.
 
 ### Nuclear-detection correction
 
+`Nuclear_detection_correction.m`
+
 To refine single-cell identification performed using CellProfiler v4.2.1 and histoCAT, we developed a custom MATLAB-based computational algorithm to identify multiple detections originating from the same cell, thereby improving the accuracy of cell identification.
 
 ### Field-of-view correction
+
+`FOV_correction.m`
 
 We also implemented a field-of-view correction algorithm to refine the regions included in the analysis of IMC spatial data, particularly for spinal cord tissue.
