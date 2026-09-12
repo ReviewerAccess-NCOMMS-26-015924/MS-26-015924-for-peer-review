@@ -1,67 +1,3 @@
-# ALS Brain IMC Study – Analysis Code
-
-**Manuscript ID:** NCOMMS-26-015924
-
-**Authors:** Momoka Hikosaka and Gen Ohtsuki, Ph.D.
-
-**Last updated:** September 12, 2026
-
-This repository contains the analysis code used in the revised manuscript (NCOMMS-26-015924). The code is provided for peer-review and reproducibility purposes and reproduces the computational analyses performed in the study.
-
----
-
-## Repository Contents
-
-The repository includes the following analysis modules:
-
-1. [IMC Preprocessing (MATLAB)](https://github.com/ReviewerAccess-NCOMMS-26-015924/MS-26-015924-for-peer-review/tree/IMC-preprocessing)
-2. [IMC Proteomics Spillover Correction (MATLAB)](https://github.com/ReviewerAccess-NCOMMS-26-015924/MS-26-015924-for-peer-review/tree/IMC-spillover-correction)
-3. [IMC Proteomics Clustering (R)](https://github.com/ReviewerAccess-NCOMMS-26-015924/MS-26-015924-for-peer-review/tree/IMC-Clustering)
-4. [iPSC-Derived Astrocyte Bulk RNA-seq Analysis (WSL and R)](https://github.com/ReviewerAccess-NCOMMS-26-015924/MS-26-015924-for-peer-review/tree/bulk-RNAseq-Analysis)
-5. [Public Data Analysis (R)](https://github.com/ReviewerAccess-NCOMMS-26-015924/MS-26-015924-for-peer-review/tree/Public-Data-Analysis)
-
----
-
-## 1. IMC Preprocessing (MATLAB)
-
-We provide the preprocessing code used to correct IMC signal-detection errors, nuclear-detection errors, and field-of-view (FOV) boundaries.
-
-After these preprocessing steps are applied, a flag named `Sel01` is added to each cell. Cells marked with `Sel01 = 1` are retained for downstream analyses.
-
-### Demo data
-
-One representative sample is included as a demonstration dataset:
-
-* `SpinalCord_02_ALS.csv` — single-cell signal table
-* `Ir_image_SpinalCord_02_ALS.tiff` — corresponding Ir-channel image
-
-### Full dataset
-
-The complete IMC proteomics dataset has been deposited in Zenodo, an open-access repository developed under the European OpenAIRE program and operated by CERN.
-
-* **Zenodo record:** 10.5281/zenodo.22708058
-* **DOI:** [https://doi.org/10.5281/zenodo.22708058](https://zenodo.org/records/22708058)
-
-### IMC signal filtering
-
-`IMC_signal_filtering.m`
-
-To remove putative signal-detection errors, manual upper-threshold filtering is applied. Expression values above a manually selected threshold are replaced with `NaN` in the output table.
-
-### Nuclear-detection correction
-
-`Nuclear_detection_correction.m`
-
-To refine single-cell identification performed using CellProfiler v4.2.1 and histoCAT, we developed a custom MATLAB-based computational algorithm to identify multiple detections originating from the same cell, thereby improving the accuracy of cell identification.
-
-### Field-of-view correction
-
-`FOV_correction.m`
-
-We also implemented a field-of-view correction algorithm to refine the regions included in the analysis of IMC spatial data, particularly for spinal cord tissue.
-
----
-
 ## 2. IMC Proteomics Spillover Correction (MATLAB)
 
 We provide an in-house MATLAB program for spillover-signal compensation.
@@ -71,25 +7,28 @@ The program takes single-cell data in CSV format extracted from MCD files and co
 * `Signal Overlap Matrix_ALS_Hyperion.xlsx` for the Hyperion dataset
 * `Signal Overlap Matrix_ALS_HypXTi.xlsx` for the Hyperion XTi dataset
 
-The program outputs spillover-corrected values as CSV files with the suffix `_SOc.csv`.
+The single-cell CSV files to be corrected must be named with the suffix　`_SOc.csv`. 
+The program reads each `_SOc.csv` file, applies spillover compensation, and overwrites the same file in place with the corrected values.
 
 ### Hyperion spillover-correction code
 
-`[spillover correction code for Hyperion].m`
+`SOcorrection_all_csv_ALS_Hyperion.m`
+`Spillover_compensation_ALS_Hyperion_func.m`
 
 This script corrects single-cell data acquired using the Hyperion platform. It should be used with:
 
 * `Signal Overlap Matrix_ALS_Hyperion.xlsx`
-* `Hyperion_PrecentralGyrus_01_ALS.csv` (demo dataset)
+* `IMC_csv/Hyperion_PrecentralGyrus_01_ALS_SOc.csv` (demo dataset)
 
 ### Hyperion XTi spillover-correction code
 
-`[spillover correction code for Hyperion XTi].m`
+`SOcorrection_all_csv_ALS_HyperionXTi.m`
+`Spillover_compensation_ALS_HyperionXTi_func.m`
 
 This script corrects single-cell data acquired using the Hyperion XTi platform. It should be used with:
 
 * `Signal Overlap Matrix_ALS_HypXTi.xlsx`
-* `HyperionXTi_PrecentralGyrus_13_ALS_1.csv` (demo dataset)
+* `IMC_csv/HyperionXTi_PrecentralGyrus_13_ALS_1_SOc.csv` (demo dataset)
 
 The corresponding raw MCD data and spillover-corrected single-cell data are available in the following folders in the [[Zenodo](https://doi.org/10.5281/zenodo.22708058)]:
 
@@ -97,113 +36,3 @@ The corresponding raw MCD data and spillover-corrected single-cell data are avai
 * `IMC-Hyperion_csv_SOc`
 * `IMC-HyperionXTi_mcd`
 * `IMC-HyperionXTi_csv_SOc`
-
----
-
-## 3. IMC Proteomics Clustering (R)
-
-We provide the code used for single-cell proteomic clustering of IMC-derived data after spillover correction.
-
-Spillover-corrected single-cell tables are provided separately for the two instrument platforms used in this study:
-
-* `IMC-Hyperion_csv_SOc`
-* `IMC-HyperionXTi_csv_SOc`
-
-The corresponding integrated Seurat objects generated by the clustering workflow are provided in:
-
-* `IMC-Hyperion_rds`
-* `IMC-HyperionXTi_rds`
-
-These data are available in the [[Zenodo](https://doi.org/10.5281/zenodo.22708058)].
-
-
-
-### Analysis Code
-
-`1_IMC-Hyperion_Seurat_clustering.Rmd`
-
-This script performs single-cell protein clustering of Hyperion imaging mass cytometry data using the Seurat framework. The workflow includes data loading, preprocessing, integration, dimensionality reduction, clustering, and visualization of cell populations.
-
-`1_IMC-HyperionXTi_Seurat_clustering.Rmd`
-
-This script performs single-cell protein clustering of Hyperion XTi imaging mass cytometry data using the Seurat framework. Subsequent analyses and visualizations are performed using the same general workflow as that used for the Hyperion dataset.
-
-`2_IMC-Hyperion_Heatmap.Rmd`
-
-This script calculates the mean protein expression for each major cell type, applies Z-score scaling across cell types for each marker, and generates a heatmap.
-
-`3_IMC-Hyperion_DEPs_dotplot.Rmd`
-
-This script calculates differential marker expression between the ALS and control groups within each major cell type using the integrated IMC Seurat object and visualizes the results as a dot plot.
-
-`4_IMC-Hyperion_Reclustering.Rmd`
-
-This script performs subclustering analyses of the major cell populations identified from IMC single-cell protein data. It also generates dot plots showing marker expression across cellular subtypes for selected major cell classes in the integrated IMC Seurat object.
-
-`5_IMC-Hyperion_Monocle_trajectory.Rmd`
-
-This script uses Monocle 3 to infer and visualize a predicted cellular continuum among astrocyte subtypes identified from integrated IMC single-cell protein data.
-
-
-> **Note:** The parameters used in these scripts are currently optimized for the precentral gyrus dataset.
-
----
-
-## 4. iPSC-Derived Astrocyte Bulk RNA-seq Analysis (WSL and R)
-
-This module contains the scripts used to preprocess and analyze bulk RNA-seq data obtained from iPSC-derived astrocytes at 1 and 4 weeks.
-
-The workflow includes:
-
-* Read preprocessing
-* Alignment to the human reference genome
-* Gene-level quantification
-* Expression normalization
-* Differential-expression analysis
-* Heatmap visualization
-* Preparation of pre-ranked gene lists for gene set enrichment analysis (GSEA)
-
-The raw RNA-seq data have been deposited in the Gene Expression Omnibus (GEO) under accession number **GSEXXXXX**.
-
-
-### Analysis Code
-
-`1_RNAseq_preprocessing.sh`
-
-This script performs read preprocessing using fastp and paired-end alignment to the human reference genome using HISAT2. The resulting alignments are coordinate-sorted, indexed, and summarized using samtools.
-
-`2_RNAseq_featurecounts.sh`
-
-This script quantifies gene-level expression from coordinate-sorted BAM files using featureCounts. All available samples are quantified in a single run to generate a combined count matrix and its corresponding read-assignment summary.
-
-`3_RNAseq_normalize_counts.R`
-
-This script imports the gene-level featureCounts matrix, assigns sample metadata, filters lowly expressed genes using edgeR, calculates trimmed mean of M-values (TMM) normalization factors, and generates TPM and `log2(TPM + 1)` expression matrices.
-
-`4_RNAseq_top_DEG_heatmaps.R`
-
-This script independently identifies the top differentially expressed genes at 1 and 4 weeks using limma, visualizes their expression in heatmaps, and exports the genes assigned to each heatmap row cluster for enrichment analysis.
-
-`5_RNAseq_prepare_GSEA_ranked_list.R`
-
-This script uses limma to calculate moderated *t*-statistics for the comparison between ETP10- and ETP0-treated 1-week astrocytes and exports a pre-ranked gene list for GSEA Pre-ranked analysis.
-
----
-
-## 5. Public Data Analysis (R)
-
-We provide R scripts used to analyze publicly available single-nucleus RNA-seq data from ALS and control samples obtained from GEO accession [GSE174332](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE174332) (Pineda et al., *Cell*, 2024).
-
-`scRNAseq_Seurat.Rmd`
-
-This script performs Seurat-based integration and clustering of publicly available single-nucleus RNA-seq data from ALS and control samples.
-
-`scRNAseq_expression.Rmd`
-
-This script loads the integrated Seurat object and performs gene-expression visualization and statistical analysis.
-
----
-
-## Notes
-
-This repository is provided for peer-review and reproducibility purposes. Additional documentation may be added following manuscript acceptance.
