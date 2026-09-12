@@ -40,7 +40,7 @@ One representative sample is included as a demonstration dataset:
 The complete IMC proteomics dataset has been deposited in Zenodo, an open-access repository developed under the European OpenAIRE program and operated by CERN.
 
 * **Zenodo record:** 10.5281/zenodo.22708058
-* **DOI:** https://doi.org/10.5281/zenodo.22708058
+* **DOI:** [https://doi.org/10.5281/zenodo.22708058](https://zenodo.org/records/22708058)
 
 ### IMC signal filtering
 
@@ -91,7 +91,7 @@ This script corrects single-cell data acquired using the Hyperion XTi platform. 
 * `Signal Overlap Matrix_ALS_HypXTi.xlsx`
 * `HyperionXTi_PrecentralGyrus_13_ALS_1.csv` (demo dataset)
 
-The corresponding raw MCD data and spillover-corrected single-cell data are available in the following folders in the [Zenodo record](https://doi.org/10.5281/zenodo.22708058):
+The corresponding raw MCD data and spillover-corrected single-cell data are available in the following folders in the [[Zenodo](https://doi.org/10.5281/zenodo.22708058)]:
 
 * `IMC-Hyperion_mcd`
 * `IMC-Hyperion_csv_SOc`
