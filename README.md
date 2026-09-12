@@ -16,7 +16,7 @@ One representative sample is included as a demonstration dataset:
 The complete IMC proteomics dataset has been deposited in Zenodo, an open-access repository developed under the European OpenAIRE program and operated by CERN.
 
 * **Zenodo record:** 10.5281/zenodo.22708058
-* **DOI:** https://doi.org/10.5281/zenodo.22708058
+* **DOI:** [https://doi.org/10.5281/zenodo.22708058](https://zenodo.org/records/22708058)
 
 ### IMC signal filtering
 
