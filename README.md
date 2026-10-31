@@ -166,7 +166,7 @@ The workflow includes:
 * Heatmap visualization
 * Preparation of pre-ranked gene lists for gene set enrichment analysis (GSEA)
 
-The raw RNA-seq data have been deposited in the Gene Expression Omnibus (GEO) under accession number **GSEXXXXX**.
+The raw RNA-seq data have been deposited in the Gene Expression Omnibus (GEO) under accession number **GSE347173**.
 
 
 ### Analysis Code
